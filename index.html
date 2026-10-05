@@ -1,0 +1,1677 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>برنامج مهلة للتقسيط</title>
+    
+    <!-- إعدادات تطبيق الجوال المستقل (PWA) -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="برنامج مهلة">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#064e3b">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3135/3135706.png">
+
+    <!-- المكتبات الخارجية -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            font-family: 'Tajawal', sans-serif; 
+            background-color: #f8fafc; 
+            -webkit-tap-highlight-color: transparent;
+            margin: 0;
+            padding: 0;
+        }
+
+        .sidebar-item { transition: all 0.2s ease; }
+        .sidebar-item.active { background-color: #047857; color: #ffffff; border-right: 4px solid #10b981; }
+        .sidebar-item:hover:not(.active) { background-color: #064e3b; }
+        
+        .bottom-nav-item.active { color: #047857; }
+        .bottom-nav-item.active i { transform: scale(1.15); color: #047857; }
+        
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* تكييف شاشات الهواتف مع منطقة النوتش */
+        .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+        .safe-top { padding-top: env(safe-area-inset-top); }
+
+        /* قواعد فصل الشاشات الصارمة: كمبيوتر vs جوال */
+        html, body {
+            max-width: 100%;
+            overflow-x: hidden;
+        }
+
+        @media (min-width: 769px) {
+            body { height: 100vh; overflow: hidden; }
+            #app { height: 100vh; overflow: hidden; flex-direction: row !important; }
+            .desktop-sidebar { display: flex !important; }
+            .mobile-bottom-nav { display: none !important; }
+            .desktop-view-only { display: block !important; }
+            .mobile-view-only { display: none !important; }
+            .main-scrollable { height: 100vh; overflow-y: auto !important; overflow-x: hidden; }
+        }
+
+        @media (max-width: 768px) {
+            body { height: auto; min-height: 100vh; overflow-y: auto; overflow-x: hidden; }
+            #app { height: auto; min-height: 100vh; flex-direction: column !important; overflow-x: hidden; }
+            .desktop-sidebar { display: none !important; }
+            .mobile-bottom-nav { display: flex !important; }
+            .desktop-view-only { display: none !important; }
+            .mobile-view-only { display: block !important; }
+            .main-scrollable { overflow-y: visible !important; overflow-x: hidden; padding-bottom: 90px !important; }
+            .mobile-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+        }
+    </style>
+</head>
+<body class="text-gray-800 antialiased select-none">
+
+    <div id="app" class="flex flex-col md:flex-row w-full min-h-screen">
+        
+        <!-- 💻 القائمة الجانبية الفخمة الثابتة (تظهر فقط في أجهزة الكمبيوتر واللابتوب) -->
+        <aside class="desktop-sidebar hidden md:flex w-64 bg-emerald-950 text-emerald-100 flex-col shadow-2xl z-20 flex-shrink-0 border-l border-emerald-800/40">
+            <div class="p-6 text-center border-b border-emerald-900/80 bg-emerald-950">
+                <div class="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white text-2xl shadow-lg mb-3">
+                    <i class="fa-solid fa-wallet"></i>
+                </div>
+                <h1 class="text-2xl font-black text-white tracking-wide">برنامج مهلة</h1>
+                <p class="text-emerald-400 text-xs mt-1 font-medium">إدارة التقسيط والعقود ورأس المال</p>
+            </div>
+            
+            <nav class="flex-1 overflow-y-auto py-4">
+                <ul class="space-y-1.5 px-2">
+                    <li>
+                        <a href="#" @click.prevent="activeTab = 'global'" :class="['sidebar-item flex items-center py-3 px-4 rounded-xl text-sm font-bold', activeTab === 'global' ? 'active' : 'text-emerald-200 hover:text-white']">
+                            <i class="fa-solid fa-chart-pie w-6 text-base ml-2"></i> الإحصائيات ورأس المال
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" @click.prevent="activeTab = 'dashboard'" :class="['sidebar-item flex items-center py-3 px-4 rounded-xl text-sm font-bold', activeTab === 'dashboard' ? 'active' : 'text-emerald-200 hover:text-white']">
+                            <i class="fa-solid fa-users w-6 text-base ml-2"></i> إدارة وعملاء الشهر
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" @click.prevent="activeTab = 'reports'" :class="['sidebar-item flex items-center py-3 px-4 rounded-xl text-sm font-bold', activeTab === 'reports' ? 'active' : 'text-emerald-200 hover:text-white']">
+                            <i class="fa-solid fa-file-invoice-dollar w-6 text-base ml-2"></i> تقارير الشهر
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" @click.prevent="activeTab = 'excel'" :class="['sidebar-item flex items-center py-3 px-4 rounded-xl text-sm font-bold', activeTab === 'excel' ? 'active' : 'text-emerald-200 hover:text-white']">
+                            <i class="fa-solid fa-file-excel w-6 text-base ml-2"></i> إضافة من إكسل
+                        </a>
+                    </li>
+                    <li class="pt-3">
+                        <a href="#" @click.prevent="openCloudModal" class="sidebar-item flex items-center justify-between py-3 px-4 rounded-xl text-xs font-bold text-amber-300 bg-emerald-900/40 hover:bg-emerald-900/70 border border-amber-400/30">
+                            <span class="flex items-center">
+                                <i class="fa-solid fa-cloud-arrow-up w-6 text-base ml-2 text-amber-400"></i> المزامنة مع قوقل
+                            </span>
+                            <span v-if="googleSyncUrl" class="text-[10px] bg-emerald-700 text-white px-2 py-0.5 rounded-full">نشط</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+
+            <div class="p-4 border-t border-emerald-900/80 space-y-2.5 bg-emerald-950">
+                <button @click="exportDatabaseToExcel" class="w-full text-xs text-emerald-200 hover:text-white bg-emerald-900/80 hover:bg-emerald-800 rounded-xl py-2 transition-colors border border-emerald-800 flex items-center justify-center gap-1.5 font-bold">
+                    <i class="fa-solid fa-file-excel text-emerald-400"></i> تصدير قاعدة البيانات (إكسل)
+                </button>
+                <button @click="openDeleteModal(selectedMonth)" class="w-full text-xs text-rose-300 hover:text-rose-100 py-1.5 transition-colors flex items-center justify-center gap-1.5 font-bold">
+                    <i class="fa-solid fa-calendar-xmark text-rose-400"></i> مسح بيانات شهر محدد
+                </button>
+                 <button @click="resetStatusesKeepData" class="w-full text-xs text-amber-200 hover:text-white bg-amber-900/60 hover:bg-amber-800 rounded-xl py-2 transition flex items-center justify-center gap-1.5 font-bold border border-amber-800">
+                     <i class="fa-solid fa-rotate-left text-amber-400"></i> إعادة الحالات والحسابات
+                 </button>
+            </div>
+        </aside>
+
+        <!-- 🖥️ المحتوى الرئيسي (متجاوب وذكي) -->
+        <main class="main-scrollable flex-1 flex flex-col min-w-0 bg-slate-50">
+            
+            <!-- الشريط العلوي الذكي (Top Header) -->
+            <header class="bg-white px-3 md:px-8 py-2.5 md:py-3.5 shadow-xs border-b border-gray-200 sticky top-0 z-30 safe-top">
+                <div class="flex justify-between items-center gap-2">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <div class="mobile-view-only w-8 h-8 rounded-xl bg-emerald-700 text-white flex items-center justify-center text-sm shadow-xs flex-shrink-0">
+                            <i class="fa-solid fa-wallet"></i>
+                        </div>
+                        <h2 class="text-sm md:text-xl font-black text-gray-800 truncate">
+                            <span v-if="activeTab === 'global'"><i class="fa-solid fa-chart-pie text-emerald-600 ml-1.5 hidden md:inline"></i> الإحصائيات العامة ورأس المال</span>
+                            <span v-if="activeTab === 'dashboard'"><i class="fa-solid fa-calendar-check text-emerald-600 ml-1.5 hidden md:inline"></i> إدارة وعملاء الشهر</span>
+                            <span v-if="activeTab === 'reports'"><i class="fa-solid fa-file-invoice-dollar text-emerald-600 ml-1.5 hidden md:inline"></i> تقارير وعمليات الشهر</span>
+                            <span v-if="activeTab === 'excel'"><i class="fa-solid fa-file-excel text-emerald-600 ml-1.5 hidden md:inline"></i> إضافة واستيراد من إكسل</span>
+                        </h2>
+                    </div>
+
+                    <div class="flex items-center gap-2 flex-shrink-0">
+                        <!-- كرت مؤشر المزامنة السحابية -->
+                        <div class="flex items-center gap-1.5 bg-gray-50 px-2.5 md:px-3 py-1.5 rounded-full md:rounded-xl border border-gray-200 shadow-xs text-xs">
+                            <template v-if="googleSyncUrl">
+                                <span class="flex items-center gap-1 font-bold text-emerald-700 text-xs">
+                                    <span class="relative flex h-2 w-2">
+                                        <span :class="syncStatus === 'syncing' ? 'animate-ping' : ''" class="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                        <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                    </span>
+                                    <span class="hidden md:inline">{{ syncStatus === 'syncing' ? 'جاري الحفظ...' : 'متزامن بقوقل' }}</span>
+                                </span>
+                                <button @click="fetchFromGoogle(false)" :disabled="syncStatus === 'syncing'" class="text-gray-400 hover:text-emerald-600 p-0.5 transition" title="تحديث وسحب أحدث البيانات من قوقل شيت">
+                                    <i :class="syncStatus === 'syncing' ? 'fa-spin' : ''" class="fa-solid fa-arrows-rotate text-xs"></i>
+                                </button>
+                                <button @click="openCloudModal" class="text-gray-400 hover:text-gray-600 p-0.5 transition" title="إعدادات الربط">
+                                    <i class="fa-solid fa-gear text-xs"></i>
+                                </button>
+                            </template>
+                            <template v-else>
+                                <button @click="openCloudModal" class="flex items-center gap-1 text-xs font-bold text-amber-700">
+                                    <i class="fa-solid fa-cloud-arrow-up text-amber-500"></i>
+                                    <span>ربط بقوقل شيت</span>
+                                </button>
+                            </template>
+                        </div>
+
+                        <!-- اختيار الشهر في الكمبيوتر فقط -->
+                        <div v-if="activeTab === 'dashboard' || activeTab === 'reports'" class="hidden md:flex items-center bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
+                            <input type="month" v-model="selectedMonth" class="bg-transparent font-bold text-emerald-900 focus:outline-none text-sm cursor-pointer">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- شريط الشهر في الجوال فقط (تحت العنوان لمنع أي تداخل) -->
+                <div v-if="activeTab === 'dashboard' || activeTab === 'reports'" class="mobile-view-only mt-2 pt-2 border-t border-gray-100 flex justify-between items-center">
+                    <span class="text-xs font-bold text-gray-500 flex items-center gap-1">
+                        <i class="fa-regular fa-calendar-days text-emerald-600"></i> الشهر المعروض:
+                    </span>
+                    <div class="flex items-center bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200 shadow-xs">
+                        <input type="month" v-model="selectedMonth" class="bg-transparent font-bold text-emerald-900 focus:outline-none text-xs cursor-pointer">
+                    </div>
+                </div>
+            </header>
+
+            <!-- محتوى الشاشات المتناسق -->
+            <div class="p-4 md:p-8 space-y-6">
+                
+                <!-- 🌐 الشاشة 0: الإحصائيات العامة ورأس المال (Global) -->
+                <div v-show="activeTab === 'global'" class="space-y-6 animate-fade-in">
+                    
+                    <!-- بطاقة محفظة رأس المال العام والسيولة -->
+                    <div class="bg-gradient-to-l from-emerald-800 via-emerald-900 to-teal-950 text-white rounded-3xl shadow-xl p-6 md:p-8 border border-emerald-700/50">
+                        <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+                            <div>
+                                <span class="bg-emerald-500/30 text-emerald-200 text-xs px-3.5 py-1 rounded-full font-bold border border-emerald-400/30 inline-flex items-center">
+                                    <i class="fa-solid fa-coins mr-1.5 text-yellow-300"></i> محفظة ورأس مال الصندوق العام
+                                </span>
+                                <h3 class="text-xl md:text-3xl font-black mt-2.5">رصيد رأس المال والسيولة المتاحة</h3>
+                                <p class="text-emerald-200 text-xs md:text-sm mt-1">تحديد وزيادة أو إنقاص رأس المال مباشرة دون اشتراط تسجيل عملاء</p>
+                            </div>
+
+                            <!-- حقل تعديل رأس المال وأزرار الزيادة والنقصان -->
+                            <div class="w-full lg:w-auto flex flex-wrap items-center justify-between lg:justify-end gap-3 bg-white/10 p-3.5 rounded-2xl backdrop-blur-md border border-white/15">
+                                <div class="flex items-center gap-2">
+                                    <input type="number" v-model.number="totalFundCapital" @change="saveData" min="0" placeholder="0" class="w-32 md:w-40 px-3 py-2 rounded-xl bg-white text-gray-800 font-black text-center outline-none focus:ring-2 focus:ring-emerald-400 text-lg shadow-inner">
+                                    <span class="text-xs font-bold text-emerald-100">ريال</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button @click="openCapitalModal('add')" class="bg-emerald-500 hover:bg-emerald-400 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold shadow transition flex items-center gap-1.5">
+                                        <i class="fa-solid fa-circle-plus"></i> زيادة (+)
+                                    </button>
+                                    <button @click="openCapitalModal('withdraw')" class="bg-rose-500 hover:bg-rose-400 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold shadow transition flex items-center gap-1.5">
+                                        <i class="fa-solid fa-circle-minus"></i> إنقاص (-)
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- كروت أرقام الصندوق والسيولة -->
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6 pt-6 border-t border-emerald-700/60">
+                            <div class="bg-white/10 rounded-2xl p-4 border border-white/10">
+                                <p class="text-emerald-200 text-xs font-bold mb-1">رأس المال الكلي في الصندوق</p>
+                                <p class="text-2xl md:text-3xl font-black text-white">{{ (totalFundCapital || 0).toLocaleString() }} <span class="text-xs font-normal text-emerald-300">ريال</span></p>
+                            </div>
+                            <div class="bg-white/10 rounded-2xl p-4 border border-white/10">
+                                <p class="text-amber-200 text-xs font-bold mb-1">المشغّل في السوق (عقود نشطة)</p>
+                                <p class="text-2xl md:text-3xl font-black text-amber-300">{{ globalStats.activeCapital.toLocaleString() }} <span class="text-xs font-normal text-amber-200">ريال</span></p>
+                            </div>
+                            <div class="bg-white/10 rounded-2xl p-4 border border-white/10">
+                                <p class="text-teal-200 text-xs font-bold mb-1">السيولة المتاحة (في الصندوق)</p>
+                                <p class="text-2xl md:text-3xl font-black text-emerald-300">{{ availableCashDisplay.toLocaleString() }} <span class="text-xs font-normal text-emerald-200">ريال</span></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ملخص الأداء الشامل -->
+                    <div class="bg-white rounded-3xl shadow-xs p-6 md:p-8 border border-gray-200">
+                        <div class="flex justify-between items-center mb-6">
+                            <h2 class="text-lg md:text-2xl font-black text-gray-800"><i class="fa-solid fa-chart-line text-emerald-600 ml-2"></i> ملخص الأداء الشامل (طوال الوقت)</h2>
+                            <span class="text-xs md:text-sm bg-blue-50 text-blue-800 px-3 py-1 rounded-full font-bold border border-blue-200">{{ totalContractsAllTime }} عقد مسجل</span>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
+                            <div class="bg-blue-50/80 border-r-4 border-blue-500 p-4 md:p-5 rounded-2xl border border-blue-100">
+                                <h3 class="text-blue-900 font-bold text-xs mb-1">رأس المال المُقسط</h3>
+                                <p class="text-xl md:text-2xl font-black text-blue-900">{{ globalStats.totalCapitalAllTime.toLocaleString() }} <span class="text-xs font-normal text-blue-700">ريال</span></p>
+                            </div>
+                            
+                            <div class="bg-amber-50/80 border-r-4 border-amber-500 p-4 md:p-5 rounded-2xl border border-amber-100">
+                                <h3 class="text-amber-900 font-bold text-xs mb-1">النشط بالسوق</h3>
+                                <p class="text-xl md:text-2xl font-black text-amber-900">{{ globalStats.activeCapital.toLocaleString() }} <span class="text-xs font-normal text-amber-700">ريال</span></p>
+                            </div>
+
+                            <div class="bg-emerald-50/80 border-r-4 border-emerald-500 p-4 md:p-5 rounded-2xl border border-emerald-100">
+                                <h3 class="text-emerald-900 font-bold text-xs mb-1">صافي الأرباح</h3>
+                                <p class="text-xl md:text-2xl font-black text-emerald-900">{{ globalStats.totalNetProfitAllTime.toLocaleString() }} <span class="text-xs font-normal text-emerald-700">ريال</span></p>
+                            </div>
+
+                            <div class="bg-red-50/80 border-r-4 border-red-500 p-4 md:p-5 rounded-2xl border border-red-100">
+                                <h3 class="text-red-900 font-bold text-xs mb-1">الخصم الممنوح</h3>
+                                <p class="text-xl md:text-2xl font-black text-red-900">{{ globalStats.totalDiscounts.toLocaleString() }} <span class="text-xs font-normal text-red-700">ريال</span></p>
+                            </div>
+                        </div>
+
+                        <!-- جدول وقائمة الشهور -->
+                        <h3 class="text-base md:text-lg font-bold text-gray-800 mb-3 border-r-4 border-emerald-500 pr-2">إحصائيات الشهور</h3>
+                        
+                        <!-- في الجوال كبطاقات -->
+                        <div class="mobile-view-only space-y-2.5">
+                            <div v-if="monthsSummary.length === 0" class="text-center py-6 text-gray-400 text-xs">لا توجد بيانات مسجلة بعد</div>
+                            <div v-for="m in monthsSummary" :key="m.month" class="bg-gray-50 p-3.5 rounded-xl border border-gray-200 flex justify-between items-center">
+                                <div>
+                                    <p class="font-extrabold text-sm text-gray-800" dir="ltr">{{ m.month }}</p>
+                                    <p class="text-xs text-gray-500 mt-0.5">رأس المال: <span class="font-bold text-gray-700">{{ m.capital.toLocaleString() }}</span></p>
+                                    <p class="text-xs text-emerald-600 font-bold">الربح: {{ m.netProfit.toLocaleString() }} ريال</p>
+                                </div>
+                                <button @click="goToMonth(m.month)" class="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-xs">
+                                    عرض <i class="fa-solid fa-arrow-left text-[10px]"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- في الكمبيوتر كجدول متناسق -->
+                        <div class="desktop-view-only overflow-x-auto">
+                            <table class="w-full text-right border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-100 border-b text-xs text-gray-700">
+                                        <th class="py-3 px-4 font-bold">الشهر</th>
+                                        <th class="py-3 px-4 font-bold">إجمالي رأس المال</th>
+                                        <th class="py-3 px-4 font-bold">صافي الأرباح</th>
+                                        <th class="py-3 px-4 font-bold">عدد العقود</th>
+                                        <th class="py-3 px-4 font-bold text-center">الإجراء</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-if="monthsSummary.length === 0">
+                                        <td colspan="5" class="py-8 text-center text-gray-400 text-xs">لا يوجد بيانات لعرضها</td>
+                                    </tr>
+                                    <tr v-for="m in monthsSummary" :key="m.month" class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                                        <td class="py-3.5 px-4 font-bold text-gray-800" dir="ltr">{{ m.month }}</td>
+                                        <td class="py-3.5 px-4 text-gray-700 font-medium">{{ m.capital.toLocaleString() }} ريال</td>
+                                        <td class="py-3.5 px-4 text-emerald-700 font-bold">{{ m.netProfit.toLocaleString() }} ريال</td>
+                                        <td class="py-3.5 px-4 text-gray-600">{{ m.clientCount }} عقد</td>
+                                        <td class="py-3.5 px-4 text-center">
+                                            <button @click="goToMonth(m.month)" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-xl text-xs font-bold shadow-xs transition">
+                                                عرض عقود الشهر <i class="fa-solid fa-arrow-left mr-1"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- 👥 الشاشة 1: إدارة عملاء وإحصائيات الشهر (Dashboard) -->
+                <div v-show="activeTab === 'dashboard'" class="space-y-5 animate-fade-in">
+                    
+                    <!-- شريط تحكم رأس مال الشهر الإضافي -->
+                    <div class="bg-white p-3.5 md:p-4 rounded-2xl shadow-xs border border-emerald-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-lg flex-shrink-0">
+                                <i class="fa-solid fa-coins"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-xs md:text-sm font-bold text-gray-800">رأس مال إضافي لشهر ({{ selectedMonth }})</h4>
+                                <p class="text-[11px] md:text-xs text-gray-500">زيادة أو إنقاص رأس مال الشهر مباشرة دون تسجيل عميل</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+                            <div class="flex items-center border border-gray-200 rounded-xl overflow-hidden bg-white shadow-xs">
+                                <button @click="adjustMonthlyCapital(1000)" class="px-3 py-2 text-emerald-700 hover:bg-emerald-50 text-xs font-bold transition flex items-center gap-1.5 border-l border-gray-200">
+                                    <i class="fa-solid fa-plus text-[11px]"></i> 1,000
+                                </button>
+                                <input type="number" v-model.number="currentMonthExtra" @change="saveCurrentMonthExtra" placeholder="0" min="0" class="w-24 text-center font-black text-emerald-950 bg-transparent py-2 outline-none text-base">
+                                <button @click="adjustMonthlyCapital(-1000)" class="px-3 py-2 text-rose-700 hover:bg-rose-50 text-xs font-bold transition flex items-center gap-1.5 border-r border-gray-200">
+                                    <i class="fa-solid fa-minus text-[11px]"></i> 1,000
+                                </button>
+                            </div>
+                            <span class="text-xs font-bold text-gray-600">ريال</span>
+                        </div>
+                    </div>
+
+                    <!-- البطاقات الإحصائية الست للشهر بتصميم واضح ومتناسق تماماً -->
+                    <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2.5 sm:gap-3.5 mobile-grid-2">
+                        <div class="bg-white p-3.5 sm:p-4 rounded-2xl shadow-xs border border-gray-200 border-b-4 border-b-blue-500 min-w-0">
+                            <h3 class="text-xs font-bold text-gray-600 mb-1 leading-snug">كامل رأس مال الشهر</h3>
+                            <p class="text-lg sm:text-xl md:text-2xl font-black text-blue-900">{{ monthlyStats.totalCapital.toLocaleString() }} <span class="text-[10px] sm:text-xs font-normal text-gray-400">ريال</span></p>
+                            <span class="text-[10px] sm:text-[11px] text-gray-400 mt-1 block">شامل الإضافي</span>
+                        </div>
+                        
+                        <div class="bg-white p-3.5 sm:p-4 rounded-2xl shadow-xs border border-gray-200 border-b-4 border-b-teal-500 min-w-0">
+                            <h3 class="text-xs font-bold text-gray-600 mb-1 leading-snug">الربح المتوقع بعد الخصم</h3>
+                            <p class="text-lg sm:text-xl md:text-2xl font-black text-teal-700">{{ monthlyStats.expectedProfit.toLocaleString() }} <span class="text-[10px] sm:text-xs font-normal text-gray-400">ريال</span></p>
+                            <span class="text-[10px] sm:text-[11px] text-gray-400 mt-1 block">صافي الربح المحصل</span>
+                        </div>
+
+                        <div class="bg-red-50/80 p-3.5 sm:p-4 rounded-2xl shadow-xs border border-red-200 border-b-4 border-b-rose-500 min-w-0">
+                            <h3 class="text-xs font-bold text-rose-800 mb-1 leading-snug">الخصم الممنوح</h3>
+                            <p class="text-lg sm:text-xl md:text-2xl font-black text-rose-600">{{ monthlyStats.explicitDiscounts.toLocaleString() }} <span class="text-[10px] sm:text-xs font-normal text-rose-400">ريال</span></p>
+                            <span class="text-[10px] sm:text-[11px] text-rose-400 mt-1 block">المسامحات والتمديد</span>
+                        </div>
+
+                        <div class="bg-emerald-50/80 p-3.5 sm:p-4 rounded-2xl shadow-xs border border-emerald-200 border-b-4 border-b-emerald-600 min-w-0">
+                            <h3 class="text-xs font-bold text-emerald-800 mb-1 leading-snug">مجمل الأرباح الصافية</h3>
+                            <p class="text-lg sm:text-xl md:text-2xl font-black text-emerald-800">{{ monthlyStats.netProfit.toLocaleString() }} <span class="text-[10px] sm:text-xs font-normal text-emerald-600">ريال</span></p>
+                            <span class="text-[10px] sm:text-[11px] text-emerald-600 mt-1 block">بعد خصم المسامحات</span>
+                        </div>
+
+                        <div class="bg-white p-3.5 sm:p-4 rounded-2xl shadow-xs border border-gray-200 border-b-4 border-b-amber-500 min-w-0">
+                            <h3 class="text-xs font-bold text-gray-600 mb-1 leading-snug">باقي غير المسدد</h3>
+                            <p class="text-lg sm:text-xl md:text-2xl font-black text-amber-600">{{ monthlyStats.unpaidCapital.toLocaleString() }} <span class="text-[10px] sm:text-xs font-normal text-gray-400">ريال</span></p>
+                            <span class="text-[10px] sm:text-[11px] text-gray-400 mt-1 block">النشط بالسوق</span>
+                        </div>
+
+                        <div class="bg-white p-3.5 sm:p-4 rounded-2xl shadow-xs border border-gray-200 border-b-4 border-b-slate-400 min-w-0">
+                            <h3 class="text-xs font-bold text-gray-600 mb-1 leading-snug">عدد عقود الشهر</h3>
+                            <p class="text-lg sm:text-xl md:text-2xl font-black text-gray-800">{{ filteredClients.length }} <span class="text-[10px] sm:text-xs font-normal text-gray-400">عقد</span></p>
+                            <span class="text-[10px] sm:text-[11px] text-gray-400 mt-1 block">شامل الممدد والنشط</span>
+                        </div>
+                    </div>
+
+                    <!-- نموذج إضافة عميل جديد -->
+                    <div class="bg-white rounded-2xl shadow-xs border border-gray-200 overflow-hidden">
+                        <div class="p-5 md:p-6 bg-emerald-50/30 border-b border-gray-200">
+                            <h3 class="text-sm font-bold text-emerald-900 mb-4 flex items-center gap-1.5">
+                                <i class="fa-solid fa-user-plus text-emerald-600"></i> إضافة عميل جديد لشهر ({{ selectedMonth }}):
+                            </h3>
+                            <form @submit.prevent="addSingleClient" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5 items-end">
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-700 mb-1.5">اسم العميل:</label>
+                                    <input type="text" v-model="newClient.name" placeholder="مثال: محمد عبدالله" required class="w-full px-3.5 py-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-xs md:text-sm bg-white shadow-xs">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-700 mb-1.5">رقم الجوال:</label>
+                                    <input type="text" v-model="newClient.phone" placeholder="05xxxxxxxx" required class="w-full px-3.5 py-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-xs md:text-sm bg-white shadow-xs">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-700 mb-1.5">رأس المال (المبلغ الأساسي):</label>
+                                    <input type="number" v-model="newClient.principal" placeholder="المبلغ بالريال" required min="1" class="w-full px-3.5 py-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-xs md:text-sm bg-white shadow-xs">
+                                </div>
+                                <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl transition shadow text-xs md:text-sm h-[42px] flex items-center justify-center gap-2">
+                                    <i class="fa-solid fa-plus"></i> إضافة العميل
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- رأس قائمة العقود وأزرار الإجراءات -->
+                        <div class="p-4 border-b flex flex-wrap justify-between items-center bg-white gap-3 text-xs">
+                            <div class="flex items-center gap-3">
+                                <h2 class="font-bold text-gray-800 text-sm md:text-base">عقود شهر ({{ selectedMonth }})</h2>
+                                <button @click="openDeleteModal(selectedMonth)" class="text-xs text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 shadow-xs" title="مسح بيانات هذا الشهر فقط">
+                                    <i class="fa-solid fa-trash-can text-xs"></i>
+                                    <span>مسح بيانات الشهر</span>
+                                </button>
+                            </div>
+                            <div class="flex items-center gap-3 text-xs font-medium text-gray-600">
+                                 <label class="flex items-center gap-1.5 font-bold text-gray-700">
+                                     <i class="fa-solid fa-filter text-emerald-600"></i>
+                                     <select v-model="clientStatusFilter" class="border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-emerald-500">
+                                         <option value="الكل">الكل</option>
+                                         <option value="ممدد">التمديد</option>
+                                         <option value="مسدد">التسديد</option>
+                                         <option value="نشط">لم يدفع</option>
+                                     </select>
+                                 </label>
+                                <span class="flex items-center"><span class="w-3 h-3 bg-white border-2 border-emerald-500 rounded-full inline-block ml-1"></span> نشط (غير مسدد)</span>
+                                <span class="flex items-center"><span class="w-3 h-3 bg-amber-400 rounded-full inline-block ml-1"></span> ممدد (مُرحل)</span>
+                                <span class="flex items-center"><span class="w-3 h-3 bg-emerald-500 rounded-full inline-block ml-1"></span> مسدد (مكتمل)</span>
+                            </div>
+                        </div>
+
+                        <!-- 📱 عرض العقود في الجوال كبطاقات لمس مريحة (Mobile Cards) -->
+                        <div class="mobile-view-only p-3.5 space-y-3">
+                            <div v-if="filteredClients.length === 0" class="py-10 text-center text-gray-400 text-xs">لا يوجد عملاء مسجلين في هذا الشهر</div>
+                            
+                            <div v-for="client in filteredClients" :key="client.id" :class="getClientRowClass(client)" class="rounded-2xl p-4 shadow-xs border border-gray-200 space-y-3 transition">
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <h3 class="font-bold text-gray-900 text-sm" :class="{'line-through text-gray-400': client.status === 'مسدد'}">{{ client.name }}</h3>
+                                        <p class="text-[11px] text-gray-500 mt-0.5"><i class="fa-solid fa-phone text-[9px] mr-0.5"></i> {{ client.phone }}</p>
+                                    </div>
+                                    <div>
+                                        <span v-if="client.status === 'مسدد'" class="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] px-2.5 py-0.5 rounded-full font-bold">
+                                            <i class="fa-solid fa-check text-[9px]"></i> تم السداد
+                                        </span>
+                                        <span v-else-if="client.status === 'ممدد'" class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] px-2.5 py-0.5 rounded-full font-bold">
+                                            <i class="fa-solid fa-clock-rotate-left text-[9px]"></i> ممدد
+                                        </span>
+                                        <span v-else class="bg-emerald-50 text-emerald-700 border border-emerald-300 text-[10px] px-2.5 py-0.5 rounded-full font-bold">
+                                            نشط
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-3 gap-2 bg-gray-50 p-2.5 rounded-xl text-center text-xs">
+                                    <div>
+                                        <p class="text-[10px] text-gray-500">رأس المال</p>
+                                        <p class="font-bold text-gray-800">{{ client.principal.toLocaleString() }}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-[10px] text-gray-500">الربح (30%)</p>
+                                        <p class="font-bold text-emerald-600">{{ getDisplayedProfit(client).toLocaleString() }}</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-[10px] text-gray-500">المطلوب</p>
+                                        <p class="font-black text-gray-900">{{ client.total.toLocaleString() }}</p>
+                                    </div>
+                                </div>
+
+                                <div class="flex justify-between items-center pt-2 border-t border-gray-100">
+                                    <div class="text-[11px] text-gray-600">
+                                        <i class="fa-regular fa-calendar text-[10px] ml-1"></i>
+                                        <input v-if="client.status === 'نشط'" type="date" v-model="client.dueDate" @change="saveData" class="bg-transparent text-xs font-bold text-gray-700 outline-none">
+                                        <span v-else class="text-xs">{{ client.dueDate }}</span>
+                                    </div>
+
+                                    <div class="flex items-center gap-2">
+                                        <template v-if="client.status === 'نشط'">
+                                            <button @click="openPayModal(client)" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1.5 px-3 rounded-xl shadow-xs transition">
+                                                <i class="fa-solid fa-circle-check"></i> تسديد
+                                            </button>
+                                            <button @click="openExtendModal(client)" class="bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold py-1.5 px-3 rounded-xl shadow-xs transition">
+                                                <i class="fa-solid fa-clock-rotate-left"></i> تمديد
+                                            </button>
+                                        </template>
+
+                                        <button v-if="client.status !== 'نشط'" @click="undoAction(client)" class="text-xs text-gray-500 hover:text-red-500 p-1 font-bold">
+                                            <i class="fa-solid fa-rotate-left ml-1"></i> تراجع
+                                        </button>
+
+                                        <button @click="deleteClient(client)" class="text-gray-300 hover:text-red-500 p-1.5 transition" title="حذف العقد">
+                                            <i class="fa-solid fa-trash text-xs"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div v-if="client.status === 'ممدد'" class="text-center bg-amber-50 p-2 rounded-xl border border-amber-200 text-[11px] text-amber-900 font-bold">
+                                    <i class="fa-solid fa-clock-rotate-left ml-1 text-amber-600"></i> تم سداد أرباح الشهر وترحيل رأس المال ({{ client.principal.toLocaleString() }} ريال) لشهر {{ getNextMonthStr(client.targetMonth) }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 💻 عرض العقود في شاشات الكمبيوتر كجدول متناسق وفخم -->
+                        <div class="desktop-view-only overflow-x-auto">
+                            <table class="w-full text-right border-collapse">
+                                <thead>
+                                    <tr class="text-gray-700 bg-slate-100/80 border-b text-xs">
+                                        <th class="py-3.5 px-4 font-bold">العميل</th>
+                                        <th class="py-3.5 px-4 font-bold">موعد السداد</th>
+                                        <th class="py-3.5 px-4 font-bold">رأس المال</th>
+                                        <th class="py-3.5 px-4 font-bold">الربح المتوقع (30%)</th>
+                                        <th class="py-3.5 px-4 font-bold">الإجمالي المطلوب</th>
+                                        <th class="py-3.5 px-4 font-bold text-center">الإجراءات</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-if="filteredClients.length === 0">
+                                        <td colspan="6" class="py-12 text-center text-gray-400 text-sm">لا يوجد عملاء مسجلين في هذا الشهر</td>
+                                    </tr>
+                                    <tr v-for="client in filteredClients" :key="client.id" :class="getClientRowClass(client)" class="border-b border-gray-100 hover:bg-slate-50/60 transition-colors">
+                                        <td class="py-3.5 px-4">
+                                            <p class="font-bold text-gray-900" :class="{'line-through text-gray-400': client.status === 'مسدد'}">{{ client.name }}</p>
+                                            <p class="text-xs text-gray-500">{{ client.phone }}</p>
+                                        </td>
+                                        <td class="py-3.5 px-4 font-medium" dir="ltr">
+                                            <input v-if="client.status === 'نشط'" type="date" v-model="client.dueDate" @change="saveData" class="bg-transparent border-b border-gray-300 text-sm focus:outline-none focus:border-emerald-500">
+                                            <span v-else class="text-gray-400 text-sm">{{ client.dueDate }}</span>
+                                        </td>
+                                        <td class="py-3.5 px-4 text-gray-800 text-sm font-bold">
+                                            {{ client.principal.toLocaleString() }} ريال
+                                            <span v-if="client.status === 'ممدد'" class="block text-[11px] text-amber-600 font-bold mt-0.5">
+                                                <i class="fa-solid fa-arrow-left text-[9px]"></i> مُرحّل لـ {{ getNextMonthStr(client.targetMonth) }}
+                                            </span>
+                                        </td>
+                                        <td class="py-3.5 px-4 text-emerald-700 text-sm font-bold">
+                                            {{ getDisplayedProfit(client).toLocaleString() }} ريال
+                                            <span v-if="client.status === 'ممدد'" class="block text-[11px] text-emerald-600 font-bold mt-0.5">
+                                                <i class="fa-solid fa-check text-[9px]"></i> تم سداد الربح
+                                            </span>
+                                        </td>
+                                        <td class="py-3.5 px-4 font-black text-gray-900">{{ client.total.toLocaleString() }} ريال</td>
+                                        <td class="py-3.5 px-4 text-center">
+                                            <div class="flex items-center justify-center gap-2">
+                                                <template v-if="client.status === 'نشط'">
+                                                    <button @click="openPayModal(client)" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1.5 px-3.5 rounded-xl shadow-xs transition inline-flex items-center gap-1.5">
+                                                        <i class="fa-solid fa-circle-check"></i> تسديد
+                                                    </button>
+                                                    <button @click="openExtendModal(client)" class="bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold py-1.5 px-3.5 rounded-xl shadow-xs transition inline-flex items-center gap-1.5">
+                                                        <i class="fa-solid fa-clock-rotate-left"></i> تمديد
+                                                    </button>
+                                                </template>
+                                                <div v-if="client.status === 'مسدد'" class="inline-flex items-center bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl px-3 py-1 text-xs font-bold shadow-xs">
+                                                    <i class="fa-solid fa-check ml-1.5 text-emerald-600"></i> تم السداد
+                                                    <button @click="undoAction(client)" class="mr-2 text-emerald-700 hover:text-red-500 transition" title="تراجع"><i class="fa-solid fa-rotate-left"></i></button>
+                                                </div>
+                                                <div v-if="client.status === 'ممدد'" class="inline-flex items-center bg-amber-100 text-amber-900 border border-amber-300 rounded-xl px-3 py-1 text-xs font-bold shadow-xs">
+                                                    <i class="fa-solid fa-clock-rotate-left ml-1.5 text-amber-600"></i> تم التمديد والترحيل
+                                                    <button @click="undoAction(client)" class="mr-2 text-amber-700 hover:text-red-500 transition" title="تراجع"><i class="fa-solid fa-rotate-left"></i></button>
+                                                </div>
+                                                <button @click="deleteClient(client)" class="text-gray-300 hover:text-red-500 text-sm mr-1 p-1 transition" title="حذف العقد">
+                                                    <i class="fa-solid fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 📊 الشاشة 2: تقارير الشهر -->
+                <div v-show="activeTab === 'reports'" class="space-y-4 animate-fade-in">
+                    <div class="bg-white p-5 md:p-6 rounded-3xl shadow-xs border border-gray-200">
+                        <div class="flex flex-col md:flex-row justify-between items-center mb-4 gap-3 border-b border-gray-100 pb-4">
+                            <h2 class="text-base md:text-xl font-bold text-gray-800"><i class="fa-solid fa-file-invoice-dollar text-emerald-600 ml-1.5"></i> سجل تقارير شهر ({{ selectedMonth }})</h2>
+                            <div class="relative w-full md:w-80">
+                                <input type="text" v-model="searchQuery" placeholder="بحث بالاسم أو نوع العملية..." class="w-full pl-9 pr-4 py-2 border rounded-xl text-xs md:text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-emerald-500 shadow-xs">
+                                <i class="fa-solid fa-search absolute left-3 top-3 text-gray-400 text-xs"></i>
+                            </div>
+                        </div>
+
+                        <!-- في الجوال كبطاقات -->
+                        <div class="mobile-view-only space-y-2.5">
+                            <div v-if="filteredReports.length === 0" class="py-8 text-center text-gray-400 text-xs">لا توجد حركات مسجلة لهذا الشهر</div>
+                            <div v-for="r in filteredReports" :key="r.id" class="p-3.5 bg-gray-50 rounded-2xl border border-gray-200 space-y-2">
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <h4 class="font-bold text-gray-800 text-sm">{{ r.clientName }}</h4>
+                                        <p class="text-[10px] text-gray-400">{{ r.date }}</p>
+                                    </div>
+                                    <span :class="r.type === 'سداد' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-100 text-amber-800 border-amber-300'" class="text-[10px] px-2.5 py-0.5 rounded-full font-bold border">
+                                        {{ r.type }}
+                                    </span>
+                                </div>
+                                <div class="flex justify-between items-center text-xs pt-1 border-t border-gray-100">
+                                    <span class="text-gray-500">المحصل: <strong class="text-emerald-700">{{ r.collectedTotal.toLocaleString() }} ريال</strong></span>
+                                    <span v-if="r.discount > 0" class="text-red-600 font-bold">خصم: {{ r.discount.toLocaleString() }}</span>
+                                </div>
+                                <p v-if="r.note" class="text-[10px] text-gray-500 bg-white p-2 rounded-lg border border-gray-100">{{ r.note }}</p>
+                            </div>
+                        </div>
+
+                        <!-- في الكمبيوتر كجدول متناسق -->
+                        <div class="desktop-view-only overflow-x-auto">
+                            <table class="w-full text-right border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-100 border-b text-xs text-gray-700">
+                                        <th class="py-3 px-4 font-bold">التاريخ</th>
+                                        <th class="py-3 px-4 font-bold">العميل</th>
+                                        <th class="py-3 px-4 font-bold">نوع العملية</th>
+                                        <th class="py-3 px-4 font-bold">المبلغ المحصل</th>
+                                        <th class="py-3 px-4 font-bold">الخصم الممنوح</th>
+                                        <th class="py-3 px-4 font-bold">ملاحظات</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-if="filteredReports.length === 0">
+                                        <td colspan="6" class="py-8 text-center text-gray-400 text-xs">لا توجد حركات مسجلة لهذا الشهر</td>
+                                    </tr>
+                                    <tr v-for="r in filteredReports" :key="r.id" class="border-b border-gray-100 hover:bg-gray-50 transition-colors text-xs">
+                                        <td class="py-3.5 px-4 text-gray-600" dir="ltr">{{ r.date }}</td>
+                                        <td class="py-3.5 px-4 font-bold text-gray-800">{{ r.clientName }}</td>
+                                        <td class="py-3.5 px-4">
+                                            <span :class="r.type === 'سداد' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-100 text-amber-800 border-amber-300'" class="px-2.5 py-1 rounded-lg font-bold border inline-block">
+                                                {{ r.type }}
+                                            </span>
+                                        </td>
+                                        <td class="py-3.5 px-4 font-bold text-emerald-700">{{ r.collectedTotal.toLocaleString() }} ريال</td>
+                                        <td class="py-3.5 px-4 text-red-600 font-bold">{{ r.discount ? r.discount.toLocaleString() + ' ريال' : '-' }}</td>
+                                        <td class="py-3.5 px-4 text-gray-500">{{ r.note || '-' }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 📥 الشاشة 3: استيراد من إكسل -->
+                <div v-show="activeTab === 'excel'" class="space-y-6 animate-fade-in">
+                    <div class="bg-white p-6 md:p-10 rounded-3xl shadow-xs border border-gray-200 max-w-2xl mx-auto">
+                        <div class="text-center mb-6">
+                            <div class="w-16 h-16 mx-auto rounded-3xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-3xl mb-3 shadow-xs">
+                                <i class="fa-solid fa-file-excel"></i>
+                            </div>
+                            <h2 class="text-xl md:text-2xl font-black text-gray-800">إضافة عملاء من ملف إكسل</h2>
+                            <p class="text-xs text-gray-500 mt-1">قم برفع ملف إكسل لإضافة عقود الشهر دفعة واحدة</p>
+                        </div>
+                        
+                        <div class="mb-5 bg-gray-50 p-4 rounded-2xl border border-gray-200">
+                            <label class="block text-xs font-bold text-gray-700 mb-1.5">اختر الشهر المراد الاستيراد إليه:</label>
+                            <input type="month" v-model="importMonth" class="w-full px-3.5 py-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-sm bg-white shadow-xs">
+                        </div>
+
+                        <div class="border-2 border-dashed border-emerald-300 rounded-3xl p-8 bg-emerald-50/50 hover:bg-emerald-50 transition-colors relative cursor-pointer text-center">
+                            <input type="file" accept=".xlsx, .xls" @change="handleFileUpload" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                            <i class="fa-solid fa-cloud-arrow-up text-3xl text-emerald-600 mb-2"></i>
+                            <p class="text-emerald-900 font-bold text-sm">اضغط هنا لاختيار ملف الإكسل من جهازك</p>
+                            <p class="text-xs text-emerald-600 mt-1">ترتيب الأعمدة في الملف: الاسم | رقم الجوال | رأس المال</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+
+        <!-- 📱 شريط التنقل السفلي للهواتف الذكية (Bottom Navigation Bar - يظهر فقط في الجوال) -->
+        <nav class="mobile-bottom-nav fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-gray-200 flex justify-around items-center py-2 px-1 safe-bottom shadow-2xl">
+            <button @click="activeTab = 'global'" :class="['bottom-nav-item flex flex-col items-center justify-center w-16 py-1 transition', activeTab === 'global' ? 'active' : 'text-gray-400']">
+                <i class="fa-solid fa-chart-pie text-lg mb-1"></i>
+                <span class="text-[10px] font-bold">الرئيسية</span>
+            </button>
+            <button @click="activeTab = 'dashboard'" :class="['bottom-nav-item flex flex-col items-center justify-center w-16 py-1 transition', activeTab === 'dashboard' ? 'active' : 'text-gray-400']">
+                <i class="fa-solid fa-users text-lg mb-1"></i>
+                <span class="text-[10px] font-bold">العملاء</span>
+            </button>
+            <button @click="activeTab = 'reports'" :class="['bottom-nav-item flex flex-col items-center justify-center w-16 py-1 transition', activeTab === 'reports' ? 'active' : 'text-gray-400']">
+                <i class="fa-solid fa-file-invoice-dollar text-lg mb-1"></i>
+                <span class="text-[10px] font-bold">التقارير</span>
+            </button>
+            <button @click="activeTab = 'excel'" :class="['bottom-nav-item flex flex-col items-center justify-center w-16 py-1 transition', activeTab === 'excel' ? 'active' : 'text-gray-400']">
+                <i class="fa-solid fa-file-excel text-lg mb-1"></i>
+                <span class="text-[10px] font-bold">إكسل</span>
+            </button>
+            <button @click="openCloudModal" class="flex flex-col items-center justify-center w-16 py-1 text-gray-400 hover:text-emerald-700 transition">
+                <i class="fa-solid fa-cloud-arrow-up text-lg mb-1 text-emerald-600"></i>
+                <span class="text-[10px] font-bold">قوقل</span>
+            </button>
+        </nav>
+
+        <!-- 🔹 نافذة سداد العميل (Pay Modal) -->
+        <div v-if="payModal.show" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+            <div class="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl animate-fade-in">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-base font-bold text-gray-800">تسديد عقد: {{ payModal.client?.name }}</h3>
+                    <button @click="payModal.show = false" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+                </div>
+                <div class="space-y-4">
+                    <div class="bg-gray-50 p-3 rounded-2xl border text-xs space-y-1">
+                        <div class="flex justify-between"><span>رأس المال:</span><strong>{{ payModal.client?.principal }} ريال</strong></div>
+                        <div class="flex justify-between"><span>الربح (30%):</span><strong>{{ payModal.client?.profit }} ريال</strong></div>
+                        <div class="flex justify-between text-emerald-700 font-bold border-t pt-1"><span>الإجمالي الأصلي:</span><strong>{{ payModal.client?.total }} ريال</strong></div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">خصم ممنوح للعميل (إن وُجد):</label>
+                        <input type="number" v-model.number="payModal.discount" min="0" :max="payModal.client?.profit" placeholder="0" class="w-full px-3 py-2 border rounded-xl text-sm font-bold text-center outline-none focus:ring-2 focus:ring-emerald-500 bg-gray-50">
+                    </div>
+                    <div class="bg-emerald-50 p-3 rounded-2xl border border-emerald-100 flex justify-between items-center text-sm font-black text-emerald-900">
+                        <span>المبلغ النهائي المحصل:</span>
+                        <span>{{ ((payModal.client?.total || 0) - (payModal.discount || 0)).toLocaleString() }} ريال</span>
+                    </div>
+                    <div class="flex justify-end gap-2 pt-2">
+                        <button @click="payModal.show = false" class="px-4 py-2 text-gray-500 text-xs font-bold transition">إلغاء</button>
+                        <button @click="confirmPayment" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow transition">تأكيد التسديد</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 🔸 نافذة تمديد العقد وترحيل رأس المال (Extend Modal) -->
+        <div v-if="extendModal.show" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+            <div class="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl animate-fade-in">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-base font-bold text-gray-800 flex items-center gap-2">
+                        <i class="fa-solid fa-clock-rotate-left text-amber-500"></i>
+                        <span>تمديد وترحيل عقد: {{ extendModal.client?.name }}</span>
+                    </h3>
+                    <button @click="extendModal.show = false" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+                </div>
+                
+                <div class="space-y-4">
+                    <!-- تفاصيل العقد والتمديد -->
+                    <div class="bg-amber-50/60 p-3.5 rounded-2xl border border-amber-200 text-xs space-y-2">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">رأس المال الأساسي (المُرحّل للشهر القادم):</span>
+                            <strong class="text-gray-900 font-black">{{ (extendModal.client?.principal || 0).toLocaleString() }} ريال</strong>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">صافي ربح هذا الشهر بعد الخصم:</span>
+                            <strong class="text-emerald-700 font-bold">{{ Math.max(0, (extendModal.client?.profit || 0) - (extendModal.discount || 0)).toLocaleString() }} ريال</strong>
+                        </div>
+                        <div class="flex justify-between border-t border-amber-200 pt-1.5 text-amber-900">
+                            <span>الشهر القادم المُرحل إليه:</span>
+                            <strong class="font-black text-sm" dir="ltr">{{ getNextMonthStr(extendModal.client?.targetMonth) }}</strong>
+                        </div>
+                    </div>
+
+                    <!-- حقل الخصم من الأرباح -->
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1.5">خصم ممنوح من الأرباح لهذا الشهر (إن وُجد):</label>
+                        <div class="relative">
+                            <input type="number" v-model.number="extendModal.discount" min="0" :max="extendModal.client?.profit" placeholder="0" class="w-full px-3.5 py-2.5 border rounded-xl text-base font-black text-center outline-none focus:ring-2 focus:ring-amber-500 bg-gray-50 text-gray-800">
+                            <span class="absolute left-3 top-3 text-xs font-bold text-gray-400">ريال</span>
+                        </div>
+                        <p class="text-[11px] text-gray-500 mt-1">القيمة الافتراضية 30 ريال (يمكنك تعديلها بحرية أو كتابة 0 لتحصيل كامل الربح).</p>
+                    </div>
+
+                    <!-- المبلغ المحصل الآن -->
+                    <div class="bg-emerald-50 p-3.5 rounded-2xl border border-emerald-100 flex justify-between items-center text-sm font-black text-emerald-900">
+                        <span>صافي الربح المحصل الآن (لهذا الشهر):</span>
+                        <span class="text-base text-emerald-700">{{ Math.max(0, (extendModal.client?.profit || 0) - (extendModal.discount || 0)).toLocaleString() }} ريال</span>
+                    </div>
+
+                    <!-- توضيح مالي ذكي ومريح -->
+                    <div class="bg-blue-50/80 p-3 rounded-xl border border-blue-100 text-[11px] text-blue-900 space-y-1">
+                        <p class="font-bold flex items-center gap-1">
+                            <i class="fa-solid fa-circle-info text-blue-600"></i> المعالجة الحسابية للتمديد:
+                        </p>
+                        <p>1. يُسجل صافي الربح ({{ Math.max(0, (extendModal.client?.profit || 0) - (extendModal.discount || 0)).toLocaleString() }} ريال) والخصم في أرباح وتقارير هذا الشهر.</p>
+                        <p>2. يُرحّل رأس المال ({{ (extendModal.client?.principal || 0).toLocaleString() }} ريال) إلى شهر ({{ getNextMonthStr(extendModal.client?.targetMonth) }}) كعقد جديد ولا يُحسب على رأس مال الشهر الفائت.</p>
+                    </div>
+
+                    <div class="flex justify-end gap-2 pt-1">
+                        <button @click="extendModal.show = false" class="px-4 py-2 text-gray-500 text-xs font-bold transition">إلغاء</button>
+                        <button @click="confirmExtension" :disabled="isProcessingExtension" class="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-xl font-bold text-xs shadow transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-check"></i> {{ isProcessingExtension ? 'جارٍ الحفظ...' : 'تأكيد التمديد والترحيل' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 🔹 نافذة زيادة / إنقاص رأس مال الصندوق -->
+        <div v-if="capitalModal.show" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+            <div class="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-fade-in">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-base font-bold text-gray-800">{{ capitalModal.type === 'add' ? 'زيادة رأس مال الصندوق (+)' : 'إنقاص رأس مال الصندوق (-)' }}</h3>
+                    <button @click="capitalModal.show = false" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">المبلغ المراد {{ capitalModal.type === 'add' ? 'إيداعه' : 'سحبه' }}:</label>
+                        <input type="number" v-model.number="capitalModal.amount" placeholder="0" min="1" class="w-full px-3.5 py-2.5 border rounded-xl text-base font-bold text-center outline-none focus:ring-2 focus:ring-emerald-500 bg-gray-50">
+                    </div>
+                    <div class="flex justify-end gap-2 pt-2">
+                        <button @click="capitalModal.show = false" class="px-4 py-2 text-gray-500 text-xs font-bold transition">إلغاء</button>
+                        <button @click="confirmCapitalAdjustment" :class="capitalModal.type === 'add' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'" class="px-5 py-2.5 text-white rounded-xl font-bold text-xs shadow transition">تأكيد</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 🔹 نافذة الربط السحابي مع قوقل -->
+        <div v-if="cloudModal.show" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+            <div class="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl animate-fade-in">
+                <div class="flex justify-between items-center mb-4 border-b pb-3">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-xl">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-base font-bold text-gray-800">حفظ سحابي بحساب قوقل</h3>
+                            <p class="text-[11px] text-gray-500">مزامنة لحظية تعمل على الجوال والكمبيوتر</p>
+                        </div>
+                    </div>
+                    <button @click="cloudModal.show = false" class="text-gray-400 hover:text-gray-600 p-1">
+                        <i class="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                </div>
+
+                <div class="space-y-3.5 text-xs text-gray-600">
+                    <div class="p-3 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center gap-2">
+                        <i class="fa-solid fa-circle-check text-emerald-600 text-base"></i>
+                        <span class="font-bold text-emerald-800">البرنامج متصل بحسابك قوقل شيت وجاهز للمزامنة!</span>
+                    </div>
+
+                    <div>
+                        <label class="block font-bold text-gray-700 mb-1">رابط الربط السحابي (Web App URL):</label>
+                        <input type="url" v-model="cloudModal.urlInput" placeholder="https://script.google.com/macros/s/.../exec" class="w-full px-3.5 py-2.5 border rounded-xl text-xs font-mono text-gray-800 bg-gray-50 outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+
+                    <div class="pt-2 flex flex-col gap-2">
+                        <button @click="saveGoogleSyncUrl" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl shadow transition text-xs">
+                            حفظ ومزامنة فورية الآن
+                        </button>
+                        <button @click="fetchFromGoogle(true)" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2 rounded-xl transition text-xs">
+                            جلب أحدث نسخة من قوقل
+                        </button>
+                        <button v-if="googleSyncUrl" @click="disconnectGoogle" class="text-[11px] text-rose-600 hover:underline text-center mt-1">
+                            إلغاء الربط السحابي
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 🔹 نافذة مسح بيانات شهر محدد (بدلاً من المسح الكلي) -->
+        <div v-if="deleteModal.show" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+            <div class="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl animate-fade-in">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center text-xl flex-shrink-0">
+                        <i class="fa-solid fa-calendar-xmark"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-bold text-gray-800">مسح بيانات شهر محدد</h3>
+                        <p class="text-[11px] text-gray-500">حذف عملاء وتقارير هذا الشهر فقط دون التأثير على باقي الشهور</p>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1.5">اختر الشهر المراد مسح بياناته:</label>
+                        <input type="month" v-model="deleteModal.targetMonth" class="w-full px-3.5 py-2.5 border rounded-xl text-sm font-bold text-gray-800 bg-gray-50 outline-none focus:ring-2 focus:ring-rose-500 cursor-pointer">
+                    </div>
+
+                    <!-- إحصائية ما سيتم مسحه في هذا الشهر -->
+                    <div class="bg-rose-50/70 p-3.5 rounded-2xl border border-rose-100 space-y-2 text-xs">
+                        <p class="font-bold text-rose-900 flex items-center gap-1.5">
+                            <i class="fa-solid fa-triangle-exclamation text-rose-600"></i> بيانات شهر ({{ deleteModal.targetMonth }}):
+                        </p>
+                        <div class="grid grid-cols-2 gap-2 text-center pt-1">
+                            <div class="bg-white p-2.5 rounded-xl shadow-xs">
+                                <span class="text-[10px] text-gray-500 block">العملاء</span>
+                                <strong class="text-rose-700 text-sm font-black">{{ clients.filter(c => c.targetMonth === deleteModal.targetMonth).length }} عميل</strong>
+                            </div>
+                            <div class="bg-white p-2.5 rounded-xl shadow-xs">
+                                <span class="text-[10px] text-gray-500 block">التقارير</span>
+                                <strong class="text-rose-700 text-sm font-black">{{ reports.filter(r => r.targetMonth === deleteModal.targetMonth).length }} حركة</strong>
+                            </div>
+                        </div>
+                        <p class="text-[10px] text-emerald-800 font-medium pt-1">
+                            <i class="fa-solid fa-shield-halved text-emerald-600 mr-1"></i> أمان: باقي الشهور ورأس المال العام ستبقى محفوظة بالكامل ولن تتأثر.
+                        </p>
+                    </div>
+
+                    <div class="flex justify-end gap-2 pt-2">
+                        <button @click="deleteModal.show = false" class="px-4 py-2 text-gray-500 text-xs font-bold transition">إلغاء</button>
+                        <button @click="deleteMonthData" class="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-xs shadow transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-trash-can"></i> تأكيد مسح هذا الشهر
+                        </button>
+                    </div>
+
+                    <div class="pt-2 border-t border-gray-100 text-center">
+                        <button @click="resetAllData" class="text-[10px] text-gray-400 hover:text-rose-600 transition">
+                            هل تريد تصفير البرنامج بالكامل ومسح كل الشهور؟ اضغط هنا
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                const today = new Date();
+                const currentMonthStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0');
+                const savedMonth = localStorage.getItem('mohla_selected_month_v9');
+                
+                return {
+                    activeTab: 'dashboard',
+                    selectedMonth: savedMonth || currentMonthStr,
+                     clientStatusFilter: 'الكل',
+                    importMonth: currentMonthStr,
+                    searchQuery: '',
+                    
+                    totalFundCapital: 0,
+                    monthlyExtraCapital: {},
+                    
+                    clients: [],
+                    reports: [],
+                    
+                    newClient: { name: '', phone: '', principal: '' },
+                    payModal: { show: false, client: null, discount: 0 },
+                    extendModal: { show: false, client: null, discount: 30 },
+                     isProcessingExtension: false,
+                    capitalModal: { show: false, type: 'add', amount: '' },
+                    deleteModal: { show: false, targetMonth: currentMonthStr },
+                    
+                    googleSyncUrl: 'https://script.google.com/macros/s/AKfycbxhFWcDv-Z7s6E33Od4jd9v85OiGR8PL87ml4VibUstH5Slxp8_-rf9M-CAdwWcUaK0/exec',
+                    syncStatus: 'idle',
+                    isResettingData: false,
+                    lastLocalSaveAt: 0,
+                    lastSyncTime: '',
+                    cloudModal: { show: false, urlInput: 'https://script.google.com/macros/s/AKfycbxhFWcDv-Z7s6E33Od4jd9v85OiGR8PL87ml4VibUstH5Slxp8_-rf9M-CAdwWcUaK0/exec' }
+                }
+            },
+            computed: {
+                currentMonthExtra: {
+                    get() {
+                        return this.monthlyExtraCapital[this.selectedMonth] || 0;
+                    },
+                    set(val) {
+                        this.monthlyExtraCapital[this.selectedMonth] = Math.max(0, parseFloat(val) || 0);
+                    }
+                },
+                availableCashDisplay() {
+                    const totalFund = this.totalFundCapital || 0;
+                    const activeCapital = this.globalStats.activeCapital || 0;
+                    return totalFund - activeCapital;
+                },
+                filteredClients() {
+                    const list = this.clients.filter(client =>
+                        client.targetMonth === this.selectedMonth &&
+                        (this.clientStatusFilter === 'الكل' || client.status === this.clientStatusFilter)
+                    );
+                    // حركة لمن يضغط على أي عميل سدد ينزل للأسفل ومن يسدد بعده كذلك حتى يبقى بالأعلى من لم يسددوا أو تم تمديدهم
+                    return list.slice().sort((a, b) => {
+                        const aPaid = a.status === 'مسدد';
+                        const bPaid = b.status === 'مسدد';
+                        
+                        // غير المسدد ('نشط' أو 'ممدد') يسبق دائماً من تم سدادهم ليبقى بالأعلى
+                        if (!aPaid && bPaid) return -1;
+                        if (aPaid && !bPaid) return 1;
+                        
+                        // من تم سدادهم ينزلون للأسفل بحسب توقيت السداد
+                        if (aPaid && bPaid) {
+                            return (a.paidAt || 0) - (b.paidAt || 0);
+                        }
+                        
+                        return 0;
+                    });
+                },
+                filteredReports() {
+                    return this.reports.filter(report => {
+                        const matchMonth = report.targetMonth === this.selectedMonth;
+                        if (!this.searchQuery) return matchMonth;
+                        const q = this.searchQuery.toLowerCase();
+                        return matchMonth && (
+                            (report.clientName && report.clientName.toLowerCase().includes(q)) ||
+                            (report.type && report.type.toLowerCase().includes(q)) ||
+                            (report.note && report.note.toLowerCase().includes(q))
+                        );
+                    });
+                },
+                monthlyStats() {
+                    const extra = this.monthlyExtraCapital[this.selectedMonth] || 0;
+                    const monthClients = this.clients.filter(client => client.targetMonth === this.selectedMonth);
+                    
+                    // رأس المال الأساسي للشهر: يستثني العقود الممددة لأن رأس مالها رُحل للشهر القادم ولا يُحسب على الشهر الفائت
+                    const activeOrPaidClients = monthClients.filter(c => c.status !== 'ممدد');
+                    const clientsPrincipal = activeOrPaidClients.reduce((sum, c) => sum + (c.principal || 0), 0);
+                    const totalCapital = clientsPrincipal + extra;
+                    
+                    const monthClientIds = new Set(monthClients.map(c => String(c.id)));
+                    const monthReports = this.reports.filter(r =>
+                        monthClientIds.has(String(r.clientId)) || r.targetMonth === this.selectedMonth
+                    );
+                    const explicitDiscounts = monthReports.reduce((sum, r) => sum + (Number(r.discount) || 0), 0);
+                    // صافي الربح يؤخذ من الحركة نفسها: التمديد صافي ربح، والسداد يستثني رأس المال.
+                    const netProfit = Math.max(0, monthReports.reduce((sum, r) => sum + this.getReportProfit(r), 0) + (extra * 0.30));
+                    
+                    // إجمالي الأرباح المتوقعة للشهر (تشمل أرباح العقود الممددة المحصلة لهذا الشهر)
+                    const mendedProfit = monthClients.filter(c => c.status === 'ممدد').reduce((sum, c) => sum + (c.profit || 0), 0);
+                    const grossExpectedProfit = (clientsPrincipal * 0.30) + mendedProfit + (extra * 0.30);
+                    const expectedProfit = Math.max(0, grossExpectedProfit - explicitDiscounts);
+                    
+                    // باقي غير المسدد في السوق للشهر الحالي: فقط العقود النشطة التي لم تسدد بعد
+                    const activeClients = monthClients.filter(c => c.status === 'نشط');
+                    const unpaidCapital = activeClients.reduce((sum, c) => sum + (c.principal || 0), 0);
+                    
+                    return {
+                        totalCapital,
+                        expectedProfit,
+                        explicitDiscounts,
+                        netProfit,
+                        unpaidCapital
+                    };
+                },
+                allMonths() {
+                    const months = new Set();
+                    this.clients.forEach(c => { if (c.targetMonth) months.add(c.targetMonth); });
+                    this.reports.forEach(r => { if (r.targetMonth) months.add(r.targetMonth); });
+                    Object.keys(this.monthlyExtraCapital).forEach(m => {
+                        if (this.monthlyExtraCapital[m] > 0) months.add(m);
+                    });
+                    return Array.from(months).sort().reverse();
+                },
+                monthsSummary() {
+                    return this.allMonths.map(m => {
+                        const mClients = this.clients.filter(c => c.targetMonth === m);
+                        const mExtra = this.monthlyExtraCapital[m] || 0;
+                        // رأس مال الشهر يستثني الممدد المرحل للشهر القادم
+                        const capital = mClients.filter(c => c.status !== 'ممدد').reduce((sum, c) => sum + (c.principal || 0), 0) + mExtra;
+                        
+                        const monthClientIds = new Set(mClients.map(c => String(c.id)));
+                        const mReports = this.reports.filter(r =>
+                            monthClientIds.has(String(r.clientId)) || r.targetMonth === m
+                        );
+                        let earned = mExtra * 0.30;
+                        const monthReports = this.reports.filter(r =>
+                            new Set(mClients.map(c => String(c.id))).has(String(r.clientId)) || r.targetMonth === m
+                        );
+                        monthReports.forEach(r => { earned += this.getReportProfit(r); });
+                        const netProfit = Math.max(0, earned);
+                        
+                        return {
+                            month: m,
+                            capital: capital,
+                            netProfit: netProfit,
+                            clientCount: mClients.length
+                        };
+                    });
+                },
+                totalContractsAllTime() {
+                    return this.clients.length;
+                },
+                globalStats() {
+                    let totalCapitalAllTime = 0;
+                    this.allMonths.forEach(m => {
+                        const mClients = this.clients.filter(c => c.targetMonth === m);
+                        const mExtra = this.monthlyExtraCapital[m] || 0;
+                        // منع ازدواجية رأس المال: الممدد لا يحسب على الشهر السابق بل على الشهر المرحل إليه
+                        totalCapitalAllTime += mClients.filter(c => c.status !== 'ممدد').reduce((sum, c) => sum + (c.principal || 0), 0) + mExtra;
+                    });
+                    
+                    const activeCapital = this.clients
+                        .filter(c => c.status === 'نشط')
+                        .reduce((sum, c) => sum + (c.principal || 0), 0);
+                        
+                    const totalDiscounts = this.reports.reduce((sum, r) => sum + (Number(r.discount) || 0), 0);
+                    
+                    let totalEarned = 0;
+                    Object.keys(this.monthlyExtraCapital).forEach(m => {
+                        totalEarned += (this.monthlyExtraCapital[m] || 0) * 0.30;
+                    });
+                    this.reports.forEach(r => { totalEarned += this.getReportProfit(r); });
+                    const totalNetProfitAllTime = Math.max(0, totalEarned);
+                    
+                    return {
+                        totalCapitalAllTime,
+                        activeCapital,
+                        totalNetProfitAllTime,
+                        totalDiscounts
+                    };
+                }
+            },
+            watch: {
+                selectedMonth(month) {
+                    if (month) localStorage.setItem('mohla_selected_month_v9', month);
+                }
+            },
+            methods: {
+                goToMonth(month) {
+                    this.selectedMonth = month;
+                    this.activeTab = 'dashboard';
+                },
+                getDisplayedProfit(client) {
+                    const originalProfit = Number(client?.profit) || 0;
+                    const reportType = client?.status === 'ممدد' ? 'تمديد' : client?.status === 'مسدد' ? 'سداد' : null;
+                    if (!reportType) return originalProfit;
+                    const report = this.reports.find(r =>
+                        String(r.clientId) === String(client.id) && r.type === reportType
+                    );
+                    return Math.max(0, originalProfit - (Number(report?.discount) || 0));
+                },
+                getCollectedProfit(client) {
+                    if (!client || (client.status !== 'مسدد' && client.status !== 'ممدد')) return 0;
+                    const reportType = client.status === 'ممدد' ? 'تمديد' : 'سداد';
+                    const report = this.reports.find(r =>
+                        String(r.clientId) === String(client.id) && r.type === reportType
+                    );
+                    if (!report) return 0;
+                    const collected = Number(report.collectedTotal) || 0;
+                    return reportType === 'سداد'
+                        ? Math.max(0, collected - (Number(client.principal) || 0))
+                        : collected;
+                },
+                getReportProfit(report) {
+                    const collected = Number(report?.collectedTotal) || 0;
+                    if (report?.type === 'تمديد') return collected;
+                    if (report?.type === 'سداد') {
+                        const client = this.clients.find(c => String(c.id) === String(report.clientId));
+                        return Math.max(0, collected - (Number(client?.principal) || 0));
+                    }
+                    return 0;
+                },
+                adjustMonthlyCapital(delta) {
+                    const current = this.monthlyExtraCapital[this.selectedMonth] || 0;
+                    const nextVal = Math.max(0, current + delta);
+                    this.monthlyExtraCapital[this.selectedMonth] = nextVal;
+                    this.saveData();
+                },
+                saveCurrentMonthExtra() {
+                    this.saveData();
+                },
+                openCapitalModal(type) {
+                    this.capitalModal = { show: true, type: type, amount: '' };
+                },
+                confirmCapitalAdjustment() {
+                    const amt = parseFloat(this.capitalModal.amount);
+                    if (isNaN(amt) || amt <= 0) {
+                        alert('يرجى إدخال مبلغ صحيح أكبر من الصفر');
+                        return;
+                    }
+                    if (this.capitalModal.type === 'add') {
+                        this.totalFundCapital = (this.totalFundCapital || 0) + amt;
+                    } else {
+                        if (amt > (this.totalFundCapital || 0)) {
+                            if (!confirm('المبلغ المراد سحبه أكبر من إجمالي رأس المال الحالي بالصندوق! هل تريد المتابعة؟')) return;
+                        }
+                        this.totalFundCapital = Math.max(0, (this.totalFundCapital || 0) - amt);
+                    }
+                    this.saveData();
+                    this.capitalModal.show = false;
+                },
+                openCloudModal() {
+                    this.cloudModal.urlInput = this.googleSyncUrl;
+                    this.cloudModal.show = true;
+                },
+                saveGoogleSyncUrl() {
+                    const url = (this.cloudModal.urlInput || '').trim();
+                    if (!url) return;
+                    this.googleSyncUrl = url;
+                    localStorage.setItem('mohla_google_sync_url', url);
+                    this.cloudModal.show = false;
+                    this.syncToGoogle(false);
+                },
+                disconnectGoogle() {
+                    if (confirm('هل أنت متأكد من إلغاء الربط السحابي؟')) {
+                        this.googleSyncUrl = '';
+                        this.cloudModal.urlInput = '';
+                        localStorage.removeItem('mohla_google_sync_url');
+                        this.cloudModal.show = false;
+                    }
+                },
+                async syncToGoogle(silent = true) {
+                    if (!this.googleSyncUrl) return;
+                    this.syncStatus = 'syncing';
+                    try {
+                        const payload = {
+                            clients: this.clients,
+                            reports: this.reports,
+                            totalFundCapital: this.totalFundCapital,
+                            monthlyExtraCapital: this.monthlyExtraCapital
+                        };
+                        await fetch(this.googleSyncUrl, {
+                            method: 'POST',
+                            mode: 'no-cors',
+                            cache: 'no-cache',
+                            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                            body: JSON.stringify(payload)
+                        });
+                        this.syncStatus = 'success';
+                        this.lastSyncTime = new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+                        localStorage.setItem('mohla_last_sync_time', this.lastSyncTime);
+                        if (!silent) alert('تم الحفظ والمزامنة السحابية بنجاح!');
+                    } catch (err) {
+                        console.error('Sync error:', err);
+                        this.syncStatus = 'error';
+                    } finally {
+                        setTimeout(() => { if (this.syncStatus === 'success') this.syncStatus = 'idle'; }, 3000);
+                    }
+                },
+                async fetchFromGoogle(promptConfirm = false) {
+                    if (!this.googleSyncUrl || this.isResettingData ||
+                        (!promptConfirm && Date.now() - this.lastLocalSaveAt < 15000)) return;
+                    this.syncStatus = 'syncing';
+                    try {
+                        const apiUrl = this.googleSyncUrl + (this.googleSyncUrl.includes('?') ? '&' : '?') + 'api=1&t=' + Date.now();
+                        const res = await fetch(apiUrl, { redirect: 'follow' });
+                        const text = await res.text();
+                        let data;
+                        try {
+                            data = JSON.parse(text);
+                        } catch (parseErr) {
+                            console.warn('Google response not JSON:', text.substring(0, 100));
+                            this.syncStatus = 'error';
+                            return;
+                        }
+                        if (data && data.status === 'success') {
+                            const cCount = (data.clients && data.clients.length) || 0;
+                            const rCount = (data.reports && data.reports.length) || 0;
+                            if (!promptConfirm || confirm(`تم العثور في قوقل على (${cCount}) عميل و (${rCount}) حركة.\nهل تريد تحديث البرنامج بها؟`)) {
+                                if (data.clients && Array.isArray(data.clients)) {
+                                    this.clients = data.clients.map(c => {
+                                        let tMonth = String(c.targetMonth || '');
+                                        let dDate = String(c.dueDate || '');
+                                        if (tMonth) {
+                                            const d = new Date(tMonth);
+                                            if (!isNaN(d.getTime())) tMonth = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+                                        }
+                                        if (dDate) {
+                                            const d = new Date(dDate);
+                                            if (!isNaN(d.getTime())) dDate = d.toISOString().split('T')[0];
+                                        }
+                                        return {
+                                            ...c,
+                                            principal: parseFloat(c.principal) || 0,
+                                            profit: parseFloat(c.profit) || 0,
+                                            total: parseFloat(c.total) || 0,
+                                            targetMonth: tMonth,
+                                            dueDate: dDate
+                                        };
+                                    });
+                                    this.removeDuplicateCarriedClients();
+                                }
+                                if (data.reports && Array.isArray(data.reports)) {
+                                    this.reports = data.reports.map(r => {
+                                        let tMonth = String(r.targetMonth || '');
+                                        if (tMonth) {
+                                            const d = new Date(tMonth);
+                                            if (!isNaN(d.getTime())) tMonth = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+                                        }
+                                        return {
+                                            ...r,
+                                            collectedTotal: parseFloat(r.collectedTotal) || 0,
+                                            discount: parseFloat(r.discount) || 0,
+                                            targetMonth: tMonth
+                                        };
+                                    });
+                                    this.removeDuplicateReports();
+                                }
+                                if (data.totalFundCapital !== undefined) this.totalFundCapital = parseFloat(data.totalFundCapital) || 0;
+                                if (data.monthlyExtraCapital) this.monthlyExtraCapital = data.monthlyExtraCapital;
+                                
+                                this.saveDataLocally();
+                                this.lastSyncTime = new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+                                localStorage.setItem('mohla_last_sync_time', this.lastSyncTime);
+                                this.syncStatus = 'success';
+                                if (promptConfirm) alert('تم جلب البيانات بنجاح!');
+                            }
+                        }
+                    } catch (err) {
+                        console.error('Fetch error:', err);
+                        this.syncStatus = 'error';
+                    } finally {
+                        setTimeout(() => { if (this.syncStatus === 'success') this.syncStatus = 'idle'; }, 3000);
+                    }
+                },
+                addSingleClient() {
+                    if (!this.newClient.name || !this.newClient.principal) return;
+                    this.addClientData(this.newClient.name, this.newClient.phone, parseFloat(this.newClient.principal), this.selectedMonth);
+                    this.newClient = { name: '', phone: '', principal: '' };
+                    this.saveData();
+                },
+                addClientData(name, phone, principal, month) {
+                    const profit = principal * 0.30;
+                    const total = principal + profit;
+                    
+                    const [year, m] = month.split('-').map(Number);
+                    const lastDay = new Date(year, m, 0).getDate();
+                    const dueDate = `${month}-${String(lastDay).padStart(2, '0')}`;
+
+                    this.clients.push({
+                        id: Date.now() + Math.random(),
+                        name: name.trim(),
+                        phone: phone ? String(phone).trim() : '',
+                        principal: principal,
+                        profit: profit,
+                        total: total,
+                        status: 'نشط',
+                        targetMonth: month,
+                        dueDate: dueDate
+                    });
+                },
+                deleteClient(client) {
+                    if (confirm(`هل أنت متأكد من حذف العقد الخاص بـ "${client.name}"؟`)) {
+                        this.clients = this.clients.filter(c => c.id !== client.id);
+                        this.reports = this.reports.filter(r => r.clientId !== client.id);
+                        this.saveData();
+                    }
+                },
+                getNextMonthStr(monthStr) {
+                    const [y, m] = monthStr.split('-').map(Number);
+                    const d = new Date(y, m, 1);
+                    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+                },
+                getClientRowClass(client) {
+                    if (client.status === 'مسدد') return 'bg-emerald-50/50';
+                    if (client.status === 'ممدد') return 'bg-amber-50/70 border-r-4 border-amber-400';
+                    
+                    const today = new Date();
+                    today.setHours(0,0,0,0);
+                    const due = new Date(client.dueDate);
+                    const diffDays = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
+                    
+                    if (diffDays < 0) return 'bg-red-50/80';
+                    if (diffDays <= 3) return 'bg-yellow-50/80';
+                    return 'bg-white';
+                },
+                openPayModal(client) {
+                    this.payModal = {
+                        show: true,
+                        client: client,
+                        discount: 0
+                    };
+                },
+                confirmPayment() {
+                    const client = this.payModal.client;
+                    if (!client || client.status !== 'نشط') return;
+                    const alreadyPaid = this.reports.some(r =>
+                        String(r.clientId) === String(client.id) && r.type === 'سداد'
+                    );
+                    if (alreadyPaid) {
+                        client.status = 'مسدد';
+                        this.payModal.show = false;
+                        this.saveDataLocally();
+                        alert('هذا العقد لديه حركة سداد مسجلة مسبقًا.');
+                        return;
+                    }
+                    
+                    const discount = Math.min(client.profit, Math.max(0, parseFloat(this.payModal.discount) || 0));
+                    const collected = client.total - discount;
+
+                    client.status = 'مسدد';
+                    client.paidAt = Date.now(); // حركة: ينزل العقد للأسفل فور السداد
+                    this.reports.push({
+                        id: Date.now(),
+                        clientId: client.id,
+                        targetMonth: client.targetMonth,
+                        date: new Date().toISOString().split('T')[0],
+                        clientName: client.name,
+                        type: 'سداد',
+                        collectedTotal: collected,
+                        discount: discount,
+                        note: discount > 0 ? `تم السداد بخصم ${discount} ريال` : 'سداد كامل العقد'
+                    });
+
+                    this.payModal.show = false;
+                    this.saveData();
+                },
+                openExtendModal(client) {
+                    this.extendModal = {
+                        show: true,
+                        client: client,
+                        discount: 30 // قيمة الخصم الافتراضية 30 ريال كما طلب المستخدم، مع إمكانية تعديلها
+                    };
+                },
+                confirmExtension() {
+                    const client = this.extendModal.client;
+                    if (!client || this.isProcessingExtension || client.status !== 'نشط') return;
+                    const nextMonth = this.getNextMonthStr(client.targetMonth);
+                    const alreadyExtended = this.reports.some(r =>
+                        String(r.clientId) === String(client.id) &&
+                        r.type === 'تمديد'
+                    ) || this.clients.some(c =>
+                        String(c.carriedFromClientId) === String(client.id) && c.targetMonth === nextMonth
+                    );
+                    if (alreadyExtended) {
+                        this.extendModal.show = false;
+                        alert('يوجد تمديد أو عقد مرحل لهذا العقد. تراجع عن التمديد السابق أولاً.');
+                        return;
+                    }
+                    this.isProcessingExtension = true;
+
+                    try {
+                        const profit = client.profit || 0;
+                        const discount = Math.min(profit, Math.max(0, parseFloat(this.extendModal.discount) || 0));
+                        const collected = profit - discount;
+                        const extensionId = Date.now() + Math.random();
+
+                        client.status = 'ممدد';
+                        client.extendedAt = Date.now();
+
+                        // 1. تسجيل حركة واحدة مرتبطة بالعقد الأصلي
+                        this.reports.push({
+                            id: extensionId,
+                            extensionId: extensionId,
+                            clientId: client.id,
+                            targetMonth: client.targetMonth,
+                            date: new Date().toISOString().split('T')[0],
+                            clientName: client.name,
+                            type: 'تمديد',
+                            collectedTotal: collected,
+                            discount: discount,
+                            note: discount > 0 ? `تمديد عقد مع خصم ${discount} ريال من الربح وترحيل رأس المال (${client.principal} ريال) إلى شهر ${nextMonth}` : `تمديد عقد وتحصيل كامل الربح وترحيل رأس المال (${client.principal} ريال) إلى شهر ${nextMonth}`
+                        });
+
+                        // 2. ترحيل رأس المال كعقد جديد وربطه بالحركة الأصلية
+                        const beforeCount = this.clients.length;
+                        this.addClientData(client.name, client.phone, client.principal, nextMonth);
+                        const carriedClient = this.clients[beforeCount];
+                        if (carriedClient) {
+                            carriedClient.carriedFromClientId = client.id;
+                            carriedClient.extensionId = extensionId;
+                        }
+                        this.removeDuplicateReports();
+                        this.removeDuplicateCarriedClients();
+
+                        this.extendModal.show = false;
+                        this.saveData();
+                    } finally {
+                        this.isProcessingExtension = false;
+                    }
+                },
+                undoAction(client) {
+                    const type = client.status === 'ممدد' ? 'تمديد' : 'سداد';
+                    const relatedReports = this.reports.filter(r =>
+                        String(r.clientId) === String(client.id) && r.type === type
+                    );
+                    const nextMonth = client.status === 'ممدد' ? this.getNextMonthStr(client.targetMonth) : null;
+                    const extensionIds = new Set(relatedReports.map(r => String(r.extensionId || r.id)));
+                    const carriedClients = nextMonth ? this.clients.filter(c =>
+                        c.targetMonth === nextMonth &&
+                        (String(c.carriedFromClientId) === String(client.id) ||
+                         (c.extensionId != null && extensionIds.has(String(c.extensionId))))
+                    ) : [];
+                    if (carriedClients.some(c => c.status !== 'نشط' ||
+                        this.reports.some(r => String(r.clientId) === String(c.id)))) {
+                        alert('لا يمكن التراجع: العقد المرحل في الشهر التالي لديه حركة. تراجع عن حركته أولاً.');
+                        return;
+                    }
+                    if (!confirm('هل تريد التراجع وإعادة العقد إلى نشط؟')) return;
+                    const carriedIds = new Set(carriedClients.map(c => String(c.id)));
+                    this.clients = this.clients.filter(c => !carriedIds.has(String(c.id)));
+                    this.reports = this.reports.filter(r =>
+                        !(String(r.clientId) === String(client.id) && r.type === type)
+                    );
+                    client.status = 'نشط';
+                    delete client.paidAt;
+                    delete client.extendedAt;
+                    this.saveData();
+                },
+                handleFileUpload(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, {type: 'array'});
+                        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const json = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+                        let importedCount = 0;
+                        for(let i = 1; i < json.length; i++) {
+                            const row = json[i];
+                            if(row.length >= 3 && row[0] && row[2]) {
+                                const principal = parseFloat(row[2]);
+                                if(!isNaN(principal)) {
+                                    this.addClientData(row[0], row[1], principal, this.importMonth);
+                                    importedCount++;
+                                }
+                            }
+                        }
+                        if (importedCount > 0) {
+                            this.saveData();
+                            alert(`تم استيراد ${importedCount} عميل بنجاح!`);
+                            this.selectedMonth = this.importMonth;
+                            this.activeTab = 'dashboard';
+                        }
+                    };
+                    reader.readAsArrayBuffer(file);
+                },
+                exportDatabaseToExcel() {
+                    try {
+                        const wb = XLSX.utils.book_new();
+                        const wsClients = XLSX.utils.json_to_sheet(this.clients.map(c => ({
+                            'الشهر': c.targetMonth, 'العميل': c.name, 'الجوال': c.phone,
+                            'رأس المال': c.principal, 'الربح': c.profit, 'تاريخ السداد': c.dueDate, 'الحالة': c.status
+                        })));
+                        XLSX.utils.book_append_sheet(wb, wsClients, 'العملاء');
+                        const wsReports = XLSX.utils.json_to_sheet(this.reports.map(r => ({
+                            'الشهر': r.targetMonth, 'التاريخ': r.date, 'العميل': r.clientName,
+                            'العملية': r.type, 'المحصل': r.collectedTotal, 'الخصم': r.discount || 0, 'ملاحظات': r.note
+                        })));
+                        XLSX.utils.book_append_sheet(wb, wsReports, 'التقارير');
+                        XLSX.writeFile(wb, `Mohla_Database_${new Date().toISOString().split('T')[0]}.xlsx`);
+                    } catch (e) {
+                        alert('حدث خطأ أثناء تصدير الإكسل.');
+                    }
+                },
+                saveData() {
+                    this.saveDataLocally();
+                    if (this.googleSyncUrl) this.syncToGoogle(true);
+                },
+                saveDataLocally() {
+                    this.lastLocalSaveAt = Date.now();
+                    localStorage.setItem('mohla_selected_month_v9', this.selectedMonth);
+                    localStorage.setItem('mohla_clients_v9', JSON.stringify(this.clients));
+                    localStorage.setItem('mohla_reports_v9', JSON.stringify(this.reports));
+                    localStorage.setItem('mohla_fund_capital_v9', JSON.stringify(this.totalFundCapital));
+                    localStorage.setItem('mohla_monthly_extra_v9', JSON.stringify(this.monthlyExtraCapital));
+                },
+                removeDuplicateReports() {
+                    const seen = new Set();
+                    const cleaned = [];
+                    for (let i = this.reports.length - 1; i >= 0; i--) {
+                        const report = this.reports[i];
+                        if (report.clientId === undefined || report.clientId === null) {
+                            cleaned.unshift(report);
+                            continue;
+                        }
+                        const key = [report.clientId, report.type, report.targetMonth].join('|');
+                        if (seen.has(key)) continue;
+                        seen.add(key);
+                        cleaned.unshift(report);
+                    }
+                    if (cleaned.length !== this.reports.length) this.reports = cleaned;
+                },
+                removeDuplicateCarriedClients() {
+                    const seen = new Set();
+                    const cleaned = [];
+                    for (let i = this.clients.length - 1; i >= 0; i--) {
+                        const client = this.clients[i];
+                        const key = client.extensionId
+                            ? `extension:${client.extensionId}`
+                            : client.carriedFromClientId
+                                ? `carried:${client.carriedFromClientId}|${client.targetMonth}`
+                                : null;
+                        if (key && seen.has(key)) continue;
+                        if (key) seen.add(key);
+                        cleaned.unshift(client);
+                    }
+                    if (cleaned.length !== this.clients.length) this.clients = cleaned;
+                },
+                loadData() {
+                    const c = localStorage.getItem('mohla_clients_v9');
+                    const r = localStorage.getItem('mohla_reports_v9');
+                    const fc = localStorage.getItem('mohla_fund_capital_v9');
+                    const me = localStorage.getItem('mohla_monthly_extra_v9');
+                    this.googleSyncUrl = localStorage.getItem('mohla_google_sync_url') || 'https://script.google.com/macros/s/AKfycbxhFWcDv-Z7s6E33Od4jd9v85OiGR8PL87ml4VibUstH5Slxp8_-rf9M-CAdwWcUaK0/exec';
+                    this.lastSyncTime = localStorage.getItem('mohla_last_sync_time') || '';
+
+                    if (c) this.clients = JSON.parse(c);
+                    if (r) this.reports = JSON.parse(r);
+                    this.removeDuplicateReports();
+                    this.removeDuplicateCarriedClients();
+                    if (fc) this.totalFundCapital = JSON.parse(fc);
+                    if (me) this.monthlyExtraCapital = JSON.parse(me);
+
+                    if (this.googleSyncUrl) this.fetchFromGoogle(false);
+                },
+                openDeleteModal(month) {
+                    this.deleteModal.targetMonth = month || this.selectedMonth;
+                    this.deleteModal.show = true;
+                },
+                deleteMonthData() {
+                    const m = this.deleteModal.targetMonth;
+                    if (!m) return;
+                    const clientCount = this.clients.filter(c => c.targetMonth === m).length;
+                    const reportCount = this.reports.filter(r => r.targetMonth === m).length;
+
+                    if (clientCount === 0 && reportCount === 0 && (!this.monthlyExtraCapital[m] || this.monthlyExtraCapital[m] === 0)) {
+                        alert(`شهر (${m}) فارغ ولا توجد به أي بيانات لمسحها.`);
+                        this.deleteModal.show = false;
+                        return;
+                    }
+
+                    if (confirm(`تأكيد مسح شهر (${m}) فقط:\n\n- سيتم حذف (${clientCount}) عميل في هذا الشهر.\n- سيتم حذف (${reportCount}) حركة في تقارير هذا الشهر.\n\nهل أنت متأكد من الحذف؟`)) {
+                        this.clients = this.clients.filter(c => c.targetMonth !== m);
+                        this.reports = this.reports.filter(r => r.targetMonth !== m);
+                        delete this.monthlyExtraCapital[m];
+                        this.saveData();
+                        this.deleteModal.show = false;
+                        alert(`تم مسح بيانات شهر (${m}) بنجاح! باقي الشهور ورأس المال لم تتأثر.`);
+                    }
+                },
+                resetStatusesKeepData() {
+                    if (!confirm('سيتم إبقاء الأسماء والجوالات ورؤوس الأموال والشهور، ومسح حركات السداد والتمديد وإعادة كل العقود إلى نشط. هل تريد المتابعة؟')) return;
+                    this.isResettingData = true;
+                    this.clients.forEach(client => {
+                        client.status = 'نشط';
+                        delete client.paidAt;
+                        delete client.extendedAt;
+                    });
+                    this.reports = [];
+                    this.saveDataLocally();
+                    this.syncToGoogle(false);
+                    setTimeout(() => { this.isResettingData = false; }, 5000);
+                    alert('تمت إعادة الحالات والحسابات مع إبقاء بيانات العملاء.');
+                },
+                resetAllData() {
+                    if(confirm('تنبيه شديد: هل أنت متأكد تماماً من تصفير كافة البيانات ومسح كل الشهور نهائياً؟ لا يمكن التراجع!')) {
+                        this.isResettingData = true;
+                        localStorage.removeItem('mohla_clients_v9');
+                        localStorage.removeItem('mohla_reports_v9');
+                        localStorage.removeItem('mohla_fund_capital_v9');
+                        localStorage.removeItem('mohla_monthly_extra_v9');
+                        localStorage.removeItem('mohla_selected_month_v9');
+                        this.clients = [];
+                        this.reports = [];
+                        this.totalFundCapital = 0;
+                        this.monthlyExtraCapital = {};
+                        const today = new Date();
+                        this.selectedMonth = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0');
+                        this.saveDataLocally();
+                        this.syncToGoogle(false);
+                        setTimeout(() => { this.isResettingData = false; }, 5000);
+                        this.deleteModal.show = false;
+                        alert('تم مسح وتصفير كافة البيانات بنجاح.');
+                    }
+                },
+                startAutoSync() {
+                    // تحديث دوري تلقائي كل 15 ثانية لجلب أي إضافات أو تعديلات تمت من جهاز آخر
+                    setInterval(() => {
+                        if (this.googleSyncUrl && this.syncStatus !== 'syncing' && document.visibilityState === 'visible') {
+                            if (!this.payModal.show && !this.capitalModal.show && !this.deleteModal.show) {
+                                this.fetchFromGoogle(false);
+                            }
+                        }
+                    }, 15000);
+
+                    // تحديث فوري عند تنشيط شاشة الجوال أو التبديل للنافذة
+                    document.addEventListener('visibilitychange', () => {
+                        if (document.visibilityState === 'visible' && this.googleSyncUrl && this.syncStatus !== 'syncing') {
+                            this.fetchFromGoogle(false);
+                        }
+                    });
+                }
+            },
+            mounted() {
+                this.loadData();
+                this.startAutoSync();
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

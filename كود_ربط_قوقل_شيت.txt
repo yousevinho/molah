@@ -1,0 +1,150 @@
+// ========================================================
+// كود ربط برنامج مهلة مع Google Sheets (جداول بيانات قوقل)
+// ========================================================
+// الخطوات البسيطة للربط:
+// 1. افتح متصفحك وادخل على الرابط: https://sheets.new (لإنشاء شيت جديد في حسابك قوقل).
+// 2. سمّ الملف باسم: "قاعدة بيانات برنامج مهلة".
+// 3. من القائمة العلوية اختر: الامتدادات (Extensions) -> ثم Apps Script.
+// 4. امسح أي كود موجود هناك، والصق كامل هذا الكود بدلاً منه.
+// 5. اضغط زر "نشر" (Deploy) الأزرق في الأعلى -> ثم "نشر جديد" (New deployment).
+// 6. اختر نوع النشر: "تطبيق ويب" (Web app).
+// 7. في خانة "من يملك حق الوصول" (Who has access): اختر "الجميع" (Anyone) -> ثم اضغط "نشر" (Deploy).
+// 8. وافق على الصلاحيات وانسخ رابط تطبيق الويب (الذي ينتهي بـ /exec) والصقه في برنامج مهلة!
+// ========================================================
+
+function doGet(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // 1. قراءة بيانات العملاء
+  var clientsSheet = ss.getSheetByName("العملاء");
+  var clients = [];
+  if (clientsSheet && clientsSheet.getLastRow() > 1) {
+    var cData = clientsSheet.getRange(2, 1, clientsSheet.getLastRow() - 1, 9).getValues();
+    for (var i = 0; i < cData.length; i++) {
+      if (cData[i][0] !== "" && cData[i][1] !== "") {
+        var dueVal = cData[i][8];
+        var dueFormatted = "";
+        if (dueVal instanceof Date) {
+          dueFormatted = Utilities.formatDate(dueVal, "GMT+3", "yyyy-MM-dd");
+        } else {
+          dueFormatted = String(dueVal || "");
+        }
+
+        clients.push({
+          id: cData[i][0],
+          name: String(cData[i][1]),
+          phone: String(cData[i][2]),
+          principal: Number(cData[i][3]) || 0,
+          profit: Number(cData[i][4]) || 0,
+          total: Number(cData[i][5]) || 0,
+          status: String(cData[i][6]),
+          targetMonth: String(cData[i][7]),
+          dueDate: dueFormatted
+        });
+      }
+    }
+  }
+
+  // 2. قراءة بيانات التقارير
+  var reportsSheet = ss.getSheetByName("التقارير");
+  var reports = [];
+  if (reportsSheet && reportsSheet.getLastRow() > 1) {
+    var rData = reportsSheet.getRange(2, 1, reportsSheet.getLastRow() - 1, 8).getValues();
+    for (var j = 0; j < rData.length; j++) {
+      if (rData[j][0] !== "") {
+        reports.push({
+          id: rData[j][0],
+          targetMonth: String(rData[j][1]),
+          date: String(rData[j][2]),
+          clientName: String(rData[j][3]),
+          type: String(rData[j][4]),
+          collectedTotal: Number(rData[j][5]) || 0,
+          discount: Number(rData[j][6]) || 0,
+          note: String(rData[j][7] || "")
+        });
+      }
+    }
+  }
+
+  // 3. قراءة رأس المال والإعدادات
+  var settingsSheet = ss.getSheetByName("الإعدادات");
+  var totalFundCapital = 0;
+  var monthlyExtraCapital = {};
+  if (settingsSheet && settingsSheet.getLastRow() >= 1) {
+    var sData = settingsSheet.getDataRange().getValues();
+    for (var k = 0; k < sData.length; k++) {
+      if (sData[k][0] === "totalFundCapital") totalFundCapital = Number(sData[k][1]) || 0;
+      if (sData[k][0] === "monthlyExtraCapital" && sData[k][1]) {
+        try { monthlyExtraCapital = JSON.parse(sData[k][1]); } catch(err){}
+      }
+    }
+  }
+
+  var result = {
+    status: "success",
+    clients: clients,
+    reports: reports,
+    totalFundCapital: totalFundCapital,
+    monthlyExtraCapital: monthlyExtraCapital
+  };
+
+  return ContentService.createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  try {
+    var payload = JSON.parse(e.postData.contents);
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    // 1. تحديث شيت العملاء
+    var clientsSheet = ss.getSheetByName("العملاء");
+    if (!clientsSheet) {
+      clientsSheet = ss.insertSheet("العملاء");
+    }
+    clientsSheet.clear();
+    clientsSheet.appendRow(["المعرف", "الاسم", "الجوال", "رأس المال", "الربح", "الإجمالي", "الحالة", "الشهر", "تاريخ السداد"]);
+    clientsSheet.getRange(1, 1, 1, 9).setBackground("#047857").setFontColor("#FFFFFF").setFontWeight("bold");
+
+    if (payload.clients && payload.clients.length > 0) {
+      var cRows = payload.clients.map(function(c) {
+        return [c.id, c.name, "'" + c.phone, c.principal, c.profit, c.total, c.status, c.targetMonth, c.dueDate];
+      });
+      clientsSheet.getRange(2, 1, cRows.length, 9).setValues(cRows);
+    }
+
+    // 2. تحديث شيت التقارير
+    var reportsSheet = ss.getSheetByName("التقارير");
+    if (!reportsSheet) {
+      reportsSheet = ss.insertSheet("التقارير");
+    }
+    reportsSheet.clear();
+    reportsSheet.appendRow(["المعرف", "الشهر", "التاريخ", "العميل", "نوع العملية", "المحصل", "الخصم", "ملاحظات"]);
+    reportsSheet.getRange(1, 1, 1, 8).setBackground("#047857").setFontColor("#FFFFFF").setFontWeight("bold");
+
+    if (payload.reports && payload.reports.length > 0) {
+      var rRows = payload.reports.map(function(r) {
+        return [r.id, r.targetMonth, r.date, r.clientName, r.type, r.collectedTotal, r.discount || 0, r.note || ""];
+      });
+      reportsSheet.getRange(2, 1, rRows.length, 8).setValues(rRows);
+    }
+
+    // 3. تحديث شيت الإعدادات
+    var settingsSheet = ss.getSheetByName("الإعدادات");
+    if (!settingsSheet) {
+      settingsSheet = ss.insertSheet("الإعدادات");
+    }
+    settingsSheet.clear();
+    settingsSheet.appendRow(["المتغير", "القيمة"]);
+    settingsSheet.appendRow(["totalFundCapital", payload.totalFundCapital || 0]);
+    settingsSheet.appendRow(["monthlyExtraCapital", JSON.stringify(payload.monthlyExtraCapital || {})]);
+    settingsSheet.appendRow(["lastUpdated", new Date().toLocaleString("ar-SA")]);
+    settingsSheet.getRange(1, 1, 1, 2).setBackground("#047857").setFontColor("#FFFFFF").setFontWeight("bold");
+
+    return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "تمت المزامنة بنجاح" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", error: error.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
