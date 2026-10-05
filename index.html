@@ -1355,16 +1355,10 @@
                 confirmPayment() {
                     const client = this.payModal.client;
                     if (!client || client.status !== 'نشط') return;
-                    const alreadyPaid = this.reports.some(r =>
-                        String(r.clientId) === String(client.id) && r.type === 'سداد'
+                    // إزالة بقايا سداد قديم بعد التراجع قبل تسجيل السداد الجديد.
+                    this.reports = this.reports.filter(r =>
+                        !(String(r.clientId) === String(client.id) && r.type === 'سداد')
                     );
-                    if (alreadyPaid) {
-                        client.status = 'مسدد';
-                        this.payModal.show = false;
-                        this.saveDataLocally();
-                        alert('هذا العقد لديه حركة سداد مسجلة مسبقًا.');
-                        return;
-                    }
                     
                     const discount = Math.min(client.profit, Math.max(0, parseFloat(this.payModal.discount) || 0));
                     const collected = client.total - discount;
