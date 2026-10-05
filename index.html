@@ -973,20 +973,15 @@
                         client.targetMonth === this.selectedMonth &&
                         (this.clientStatusFilter === 'الكل' || client.status === this.clientStatusFilter)
                     );
-                    // حركة لمن يضغط على أي عميل سدد ينزل للأسفل ومن يسدد بعده كذلك حتى يبقى بالأعلى من لم يسددوا أو تم تمديدهم
+                    // العقد الذي تغيرت حالته ينزل أسفل العقود النشطة.
                     return list.slice().sort((a, b) => {
-                        const aPaid = a.status === 'مسدد';
-                        const bPaid = b.status === 'مسدد';
-                        
-                        // غير المسدد ('نشط' أو 'ممدد') يسبق دائماً من تم سدادهم ليبقى بالأعلى
-                        if (!aPaid && bPaid) return -1;
-                        if (aPaid && !bPaid) return 1;
-                        
-                        // من تم سدادهم ينزلون للأسفل بحسب توقيت السداد
-                        if (aPaid && bPaid) {
-                            return (a.paidAt || 0) - (b.paidAt || 0);
-                        }
-                        
+                        const rank = { 'نشط': 0, 'ممدد': 1, 'مسدد': 2 };
+                        const aRank = rank[a.status] ?? 0;
+                        const bRank = rank[b.status] ?? 0;
+                        if (aRank !== bRank) return aRank - bRank;
+                        const aChangedAt = a.extendedAt || a.paidAt || 0;
+                        const bChangedAt = b.extendedAt || b.paidAt || 0;
+                        if (aChangedAt && bChangedAt) return aChangedAt - bChangedAt;
                         return 0;
                     });
                 },
@@ -1279,6 +1274,8 @@
                                         };
                                     });
                                     this.removeDuplicateReports();
+                                    this.saveDataLocally();
+                                    this.syncToGoogle(true);
                                 }
                                 if (data.totalFundCapital !== undefined) this.totalFundCapital = parseFloat(data.totalFundCapital) || 0;
                                 if (data.monthlyExtraCapital) this.monthlyExtraCapital = data.monthlyExtraCapital;
@@ -1400,11 +1397,26 @@
                     const client = this.extendModal.client;
                     if (!client || this.isProcessingExtension || client.status !== 'نشط') return;
                     const nextMonth = this.getNextMonthStr(client.targetMonth);
+                    // تنظيف بقايا محاولة تمديد سابقة بعد التراجع قبل إنشاء الحركة الجديدة.
+                    const oldExtensionIds = new Set(this.reports
+                        .filter(r => String(r.clientId) === String(client.id) && r.type === 'تمديد')
+                        .map(r => String(r.extensionId || r.id)));
+                    this.reports = this.reports.filter(r =>
+                        !(String(r.clientId) === String(client.id) && r.type === 'تمديد')
+                    );
+                    this.clients = this.clients.filter(c => {
+                        const belongsToClient = String(c.carriedFromClientId) === String(client.id);
+                        const belongsToOldExtension = c.extensionId != null && oldExtensionIds.has(String(c.extensionId));
+                        const hasActivity = this.reports.some(r => String(r.clientId) === String(c.id));
+                        return !(c.targetMonth === nextMonth && (belongsToClient || belongsToOldExtension) && !hasActivity);
+                    });
                     const alreadyExtended = this.reports.some(r =>
                         String(r.clientId) === String(client.id) &&
                         r.type === 'تمديد'
                     ) || this.clients.some(c =>
                         String(c.carriedFromClientId) === String(client.id) && c.targetMonth === nextMonth
+                    ) || this.clients.some(c =>
+                        c.extensionId != null && oldExtensionIds.has(String(c.extensionId))
                     );
                     if (alreadyExtended) {
                         this.extendModal.show = false;
@@ -1549,12 +1561,18 @@
                             cleaned.unshift(report);
                             continue;
                         }
-                        const key = [report.clientId, report.type, report.targetMonth].join('|');
+                        const key = [report.clientId, report.type, this.normalizeMonth(report.targetMonth)].join('|');
                         if (seen.has(key)) continue;
                         seen.add(key);
                         cleaned.unshift(report);
                     }
                     if (cleaned.length !== this.reports.length) this.reports = cleaned;
+                },
+                normalizeMonth(value) {
+                    const raw = String(value || '').trim();
+                    if (!raw) return '';
+                    const match = raw.match(/^(\d{4})-(\d{1,2})/);
+                    return match ? `${match[1]}-${String(match[2]).padStart(2, '0')}` : raw;
                 },
                 removeDuplicateCarriedClients() {
                     const seen = new Set();
@@ -1615,18 +1633,22 @@
                     }
                 },
                 resetStatusesKeepData() {
-                    if (!confirm('سيتم إبقاء الأسماء والجوالات ورؤوس الأموال والشهور، ومسح حركات السداد والتمديد وإعادة كل العقود إلى نشط. هل تريد المتابعة؟')) return;
+                    if (!confirm('سيتم حذف العقود المرحّلة، ومسح حركات السداد والتمديد، وإعادة العقود الأصلية إلى نشط مع إبقاء بياناتها الأساسية. هل تريد البدء من جديد؟')) return;
                     this.isResettingData = true;
+                    this.clients = this.clients.filter(client =>
+                        !client.carriedFromClientId && !client.extensionId
+                    );
                     this.clients.forEach(client => {
                         client.status = 'نشط';
                         delete client.paidAt;
                         delete client.extendedAt;
                     });
                     this.reports = [];
+                    this.removeDuplicateCarriedClients();
                     this.saveDataLocally();
                     this.syncToGoogle(false);
                     setTimeout(() => { this.isResettingData = false; }, 5000);
-                    alert('تمت إعادة الحالات والحسابات مع إبقاء بيانات العملاء.');
+                    alert('تمت إعادة الحالات وحذف العقود المرحّلة. يمكنك الآن إضافة البيانات من Excel من جديد.');
                 },
                 resetAllData() {
                     if(confirm('تنبيه شديد: هل أنت متأكد تماماً من تصفير كافة البيانات ومسح كل الشهور نهائياً؟ لا يمكن التراجع!')) {
@@ -1650,21 +1672,7 @@
                     }
                 },
                 startAutoSync() {
-                    // تحديث دوري تلقائي كل 15 ثانية لجلب أي إضافات أو تعديلات تمت من جهاز آخر
-                    setInterval(() => {
-                        if (this.googleSyncUrl && this.syncStatus !== 'syncing' && document.visibilityState === 'visible') {
-                            if (!this.payModal.show && !this.capitalModal.show && !this.deleteModal.show) {
-                                this.fetchFromGoogle(false);
-                            }
-                        }
-                    }, 15000);
-
-                    // تحديث فوري عند تنشيط شاشة الجوال أو التبديل للنافذة
-                    document.addEventListener('visibilitychange', () => {
-                        if (document.visibilityState === 'visible' && this.googleSyncUrl && this.syncStatus !== 'syncing') {
-                            this.fetchFromGoogle(false);
-                        }
-                    });
+                    // الجلب يتم يدويًا فقط حتى لا تعيد استجابة قديمة من Google حركة بعد التراجع.
                 }
             },
             mounted() {
