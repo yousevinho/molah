@@ -354,12 +354,22 @@
                         </div>
                     </div>
 
-                    <!-- البطاقات الإحصائية الست للشهر بتصميم واضح ومتناسق تماماً -->
-                    <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2.5 sm:gap-3.5 mobile-grid-2">
+                    <!-- ملخص الشهر -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-4 gap-2.5 sm:gap-3.5 mobile-grid-2">
                         <div class="bg-white p-3.5 sm:p-4 rounded-2xl shadow-xs border border-gray-200 border-b-4 border-b-blue-500 min-w-0">
                             <h3 class="text-xs font-bold text-gray-600 mb-1 leading-snug">كامل رأس مال الشهر</h3>
                             <p class="text-lg sm:text-xl md:text-2xl font-black text-blue-900">{{ monthlyStats.totalCapital.toLocaleString() }} <span class="text-[10px] sm:text-xs font-normal text-gray-400">ريال</span></p>
-                            <span class="text-[10px] sm:text-[11px] text-gray-400 mt-1 block">شامل الإضافي</span>
+                            <span class="text-[10px] sm:text-[11px] text-gray-400 mt-1 block">العقود والإضافي والكاش غير المستثمر</span>
+                        </div>
+                        <div class="bg-white p-3.5 sm:p-4 rounded-2xl shadow-xs border border-gray-200 border-b-4 border-b-cyan-500 min-w-0">
+                            <h3 class="text-xs font-bold text-gray-600 mb-1 leading-snug">الكاش المتاح</h3>
+                            <p class="text-lg sm:text-xl md:text-2xl font-black text-cyan-800">{{ availableCash.toLocaleString() }} <span class="text-[10px] sm:text-xs font-normal text-gray-400">ريال</span></p>
+                            <span class="text-[10px] sm:text-[11px] text-gray-400 mt-1 block">بعد الزيادة والخصم والاستثمار</span>
+                        </div>
+                        <div class="bg-white p-3.5 sm:p-4 rounded-2xl shadow-xs border border-gray-200 border-b-4 border-b-orange-500 min-w-0">
+                            <h3 class="text-xs font-bold text-gray-600 mb-1 leading-snug">رأس المال المضاف</h3>
+                            <p class="text-lg sm:text-xl md:text-2xl font-black text-orange-700">{{ monthlyStats.addedCapital.toLocaleString() }} <span class="text-[10px] sm:text-xs font-normal text-gray-400">ريال</span></p>
+                            <span class="text-[10px] sm:text-[11px] text-gray-400 mt-1 block">الإضافة المباشرة وزيادة الكاش</span>
                         </div>
                         
                         <div class="bg-white p-3.5 sm:p-4 rounded-2xl shadow-xs border border-gray-200 border-b-4 border-b-teal-500 min-w-0">
@@ -1040,13 +1050,14 @@
                     });
                 },
                 monthlyStats() {
-                    const extra = this.monthlyExtraCapital[this.selectedMonth] || 0;
+                    const extra = Number(this.monthlyExtraCapital[this.selectedMonth]) || 0;
+                    const cashDeposit = Number(this.monthlyExtraCapital.__cash?.deposits?.[this.selectedMonth]) || 0;
                     const monthClients = this.clients.filter(client => client.targetMonth === this.selectedMonth);
                     
                     // رأس المال الأساسي للشهر: يستثني العقود الممددة لأن رأس مالها رُحل للشهر القادم ولا يُحسب على الشهر الفائت
                     const activeOrPaidClients = monthClients.filter(c => c.status !== 'ممدد');
                     const clientsPrincipal = activeOrPaidClients.reduce((sum, c) => sum + (c.principal || 0), 0);
-                    const totalCapital = clientsPrincipal + extra;
+                    const totalCapital = clientsPrincipal + extra + Math.min(cashDeposit, this.availableCash);
                     
                     const monthClientIds = new Set(monthClients.map(c => String(c.id)));
                     const monthReports = this.reports.filter(r =>
@@ -1070,6 +1081,7 @@
                     
                     return {
                         totalCapital,
+                        addedCapital: extra + cashDeposit,
                         expectedProfit,
                         explicitDiscounts,
                         netProfit,
@@ -1083,6 +1095,7 @@
                     Object.keys(this.monthlyExtraCapital).filter(m => /^\d{4}-\d{2}$/.test(m)).forEach(m => {
                         if (this.monthlyExtraCapital[m] > 0) months.add(m);
                     });
+                    Object.keys(this.monthlyExtraCapital.__cash?.deposits || {}).forEach(m => months.add(m));
                     return Array.from(months).sort().reverse();
                 },
                 monthsSummary() {
@@ -1090,7 +1103,7 @@
                         const mClients = this.clients.filter(c => c.targetMonth === m);
                         const mExtra = this.monthlyExtraCapital[m] || 0;
                         // رأس مال الشهر يستثني الممدد المرحل للشهر القادم
-                        const capital = mClients.filter(c => c.status !== 'ممدد').reduce((sum, c) => sum + (c.principal || 0), 0) + mExtra;
+                        const capital = mClients.filter(c => c.status !== 'ممدد').reduce((sum, c) => sum + (c.principal || 0), 0) + mExtra + this.uninvestedCashDeposit(m);
                         
                         const monthClientIds = new Set(mClients.map(c => String(c.id)));
                         const mReports = this.reports.filter(r =>
@@ -1120,7 +1133,7 @@
                         const mClients = this.clients.filter(c => c.targetMonth === m);
                         const mExtra = this.monthlyExtraCapital[m] || 0;
                         // منع ازدواجية رأس المال: الممدد لا يحسب على الشهر السابق بل على الشهر المرحل إليه
-                        totalCapitalAllTime += mClients.filter(c => c.status !== 'ممدد').reduce((sum, c) => sum + (c.principal || 0), 0) + mExtra;
+                        totalCapitalAllTime += mClients.filter(c => c.status !== 'ممدد').reduce((sum, c) => sum + (c.principal || 0), 0) + mExtra + this.uninvestedCashDeposit(m);
                     });
                     
                     const activeCapital = this.clients
@@ -1397,6 +1410,17 @@
                     const [y, m] = monthStr.split('-').map(Number);
                     const d = new Date(y, m - 2, 1);
                     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+                },
+                uninvestedCashDeposit(month) {
+                    const ledger = this.monthlyExtraCapital.__cash || {};
+                    const deposit = Number(ledger.deposits?.[month]) || 0;
+                    const previousMonth = this.getPreviousMonthStr(month);
+                    const received = this.reports.filter(r => (r.type === 'سداد' || r.type === 'تمديد') && r.targetMonth === previousMonth && ledger.payments?.[r.id] === 'كاش')
+                        .reduce((sum, r) => sum + (Number(r.collectedTotal) || 0), 0);
+                    const used = this.clients.filter(c => c.targetMonth === month)
+                        .reduce((sum, c) => sum + (Number(ledger.uses?.[c.id]) || 0), 0);
+                    const withdrawn = Number(ledger.withdrawals?.[month]) || 0;
+                    return Math.min(deposit, Math.max(0, received + deposit - used - withdrawn));
                 },
                 addClientData(name, phone, principal, month) {
                     const profit = principal * 0.30;
