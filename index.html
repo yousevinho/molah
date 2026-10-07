@@ -359,7 +359,7 @@
                         <div class="bg-white p-3.5 sm:p-4 rounded-2xl shadow-xs border border-gray-200 border-b-4 border-b-blue-500 min-w-0">
                             <h3 class="text-xs font-bold text-gray-600 mb-1 leading-snug">كامل رأس مال الشهر</h3>
                             <p class="text-lg sm:text-xl md:text-2xl font-black text-blue-900">{{ monthlyStats.totalCapital.toLocaleString() }} <span class="text-[10px] sm:text-xs font-normal text-gray-400">ريال</span></p>
-                            <span class="text-[10px] sm:text-[11px] text-gray-400 mt-1 block">العقود والإضافي والكاش غير المستثمر</span>
+                            <span class="text-[10px] sm:text-[11px] text-gray-400 mt-1 block">العقود والكاش غير المستثمر والإضافي</span>
                         </div>
                         <div class="bg-white p-3.5 sm:p-4 rounded-2xl shadow-xs border border-gray-200 border-b-4 border-b-cyan-500 min-w-0">
                             <h3 class="text-xs font-bold text-gray-600 mb-1 leading-snug">الكاش المتاح</h3>
@@ -453,6 +453,10 @@
                                 <button @click="openDeleteModal(selectedMonth)" class="text-xs text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 shadow-xs" title="مسح بيانات هذا الشهر فقط">
                                     <i class="fa-solid fa-trash-can text-xs"></i>
                                     <span>مسح بيانات الشهر</span>
+                                </button>
+                                <button @click="resetMonthToCarryover(selectedMonth)" class="text-xs text-amber-700 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 shadow-xs" title="تصفير الشهر مع إبقاء العقود المرحّلة">
+                                    <i class="fa-solid fa-rotate-left text-xs"></i>
+                                    <span>تصفير الشهر والإبقاء على المرحّل</span>
                                 </button>
                             </div>
                             <div class="flex items-center gap-3 text-xs font-medium text-gray-600">
@@ -1057,7 +1061,7 @@
                     // رأس المال الأساسي للشهر: يستثني العقود الممددة لأن رأس مالها رُحل للشهر القادم ولا يُحسب على الشهر الفائت
                     const activeOrPaidClients = monthClients.filter(c => c.status !== 'ممدد');
                     const clientsPrincipal = activeOrPaidClients.reduce((sum, c) => sum + (c.principal || 0), 0);
-                    const totalCapital = clientsPrincipal + extra + Math.min(cashDeposit, this.availableCash);
+                    const totalCapital = clientsPrincipal + extra + this.availableCash;
                     
                     const monthClientIds = new Set(monthClients.map(c => String(c.id)));
                     const monthReports = this.reports.filter(r =>
@@ -1103,7 +1107,7 @@
                         const mClients = this.clients.filter(c => c.targetMonth === m);
                         const mExtra = this.monthlyExtraCapital[m] || 0;
                         // رأس مال الشهر يستثني الممدد المرحل للشهر القادم
-                        const capital = mClients.filter(c => c.status !== 'ممدد').reduce((sum, c) => sum + (c.principal || 0), 0) + mExtra + this.uninvestedCashDeposit(m);
+                        const capital = mClients.filter(c => c.status !== 'ممدد').reduce((sum, c) => sum + (c.principal || 0), 0) + mExtra + this.cashAvailableForMonth(m);
                         
                         const monthClientIds = new Set(mClients.map(c => String(c.id)));
                         const mReports = this.reports.filter(r =>
@@ -1133,7 +1137,7 @@
                         const mClients = this.clients.filter(c => c.targetMonth === m);
                         const mExtra = this.monthlyExtraCapital[m] || 0;
                         // منع ازدواجية رأس المال: الممدد لا يحسب على الشهر السابق بل على الشهر المرحل إليه
-                        totalCapitalAllTime += mClients.filter(c => c.status !== 'ممدد').reduce((sum, c) => sum + (c.principal || 0), 0) + mExtra + this.uninvestedCashDeposit(m);
+                        totalCapitalAllTime += mClients.filter(c => c.status !== 'ممدد').reduce((sum, c) => sum + (c.principal || 0), 0) + mExtra + this.cashAvailableForMonth(m);
                     });
                     
                     const activeCapital = this.clients
@@ -1421,6 +1425,17 @@
                         .reduce((sum, c) => sum + (Number(ledger.uses?.[c.id]) || 0), 0);
                     const withdrawn = Number(ledger.withdrawals?.[month]) || 0;
                     return Math.min(deposit, Math.max(0, received + deposit - used - withdrawn));
+                },
+                cashAvailableForMonth(month) {
+                    const ledger = this.monthlyExtraCapital.__cash || {};
+                    const previousMonth = this.getPreviousMonthStr(month);
+                    const received = this.reports.filter(r => (r.type === 'سداد' || r.type === 'تمديد') && r.targetMonth === previousMonth && ledger.payments?.[r.id] === 'كاش')
+                        .reduce((sum, r) => sum + (Number(r.collectedTotal) || 0), 0);
+                    const deposited = Number(ledger.deposits?.[month]) || 0;
+                    const used = this.clients.filter(c => c.targetMonth === month)
+                        .reduce((sum, c) => sum + (Number(ledger.uses?.[c.id]) || 0), 0);
+                    const withdrawn = Number(ledger.withdrawals?.[month]) || 0;
+                    return Math.max(0, received + deposited - used - withdrawn);
                 },
                 addClientData(name, phone, principal, month) {
                     const profit = principal * 0.30;
@@ -1794,6 +1809,25 @@
                         this.deleteModal.show = false;
                         alert(`تم مسح بيانات شهر (${m}) بنجاح! باقي الشهور ورأس المال لم تتأثر.`);
                     }
+                },
+                resetMonthToCarryover(month) {
+                    if (!month) return;
+                    const carried = this.clients.filter(c => c.targetMonth === month && c.carriedFromClientId != null);
+                    const ownClients = this.clients.filter(c => c.targetMonth === month && c.carriedFromClientId == null).length;
+                    const ownReports = this.reports.filter(r => r.targetMonth === month).length;
+                    const ledger = this.getCashLedger();
+                    const deposits = Number(ledger.deposits[month]) || 0;
+                    const withdrawals = Number(ledger.withdrawals[month]) || 0;
+                    if (!confirm(`تصفير شهر ${month}؟\n\nسيبقى ${carried.length} عقد مرحّل، وستُحذف عقود الشهر الأصلية (${ownClients}) وحركاته (${ownReports}) وتُصفّر زيادة الكاش (${deposits}) وخصم الكاش (${withdrawals}).\n\nسيُحسب الكاش من الشهر السابق فقط.`)) return;
+                    this.clients = this.clients.filter(c => c.targetMonth !== month || c.carriedFromClientId != null);
+                    const carriedIds = new Set(carried.map(c => String(c.id)));
+                    this.reports = this.reports.filter(r => r.targetMonth !== month && !carriedIds.has(String(r.clientId)));
+                    delete ledger.deposits[month];
+                    delete ledger.withdrawals[month];
+                    delete this.monthlyExtraCapital[month];
+                    this.saveData();
+                    this.selectedMonth = month;
+                    alert(`تم تصفير شهر ${month} مع إبقاء العقود المرحّلة. الكاش الآن محسوب من الشهر السابق فقط.`);
                 },
                 resetAllData() {
                     if(confirm('تنبيه شديد: هل أنت متأكد تماماً من تصفير كافة البيانات ومسح كل الشهور نهائياً؟ لا يمكن التراجع!')) {
