@@ -1256,6 +1256,7 @@
                             const cCount = (data.clients && data.clients.length) || 0;
                             const rCount = (data.reports && data.reports.length) || 0;
                             if (!promptConfirm || confirm(`تم العثور في قوقل على (${cCount}) عميل و (${rCount}) حركة.\nهل تريد تحديث البرنامج بها؟`)) {
+                                if (data.monthlyExtraCapital) this.monthlyExtraCapital = data.monthlyExtraCapital;
                                 if (data.clients && Array.isArray(data.clients)) {
                                     this.clients = data.clients.map(c => {
                                         let tMonth = String(c.targetMonth || '');
@@ -1280,6 +1281,8 @@
                                     this.removeDuplicateCarriedClients();
                                 }
                                 if (data.reports && Array.isArray(data.reports)) {
+                                    const localIds = new Map(this.reports.filter(r => r.clientId != null).map(r => [String(r.id), r.clientId]));
+                                    const savedLinks = data.monthlyExtraCapital?.__reportClients || {};
                                     this.reports = data.reports.map(r => {
                                         let tMonth = String(r.targetMonth || '');
                                         if (tMonth) {
@@ -1288,17 +1291,17 @@
                                         }
                                         return {
                                             ...r,
+                                            clientId: savedLinks[r.id] ?? localIds.get(String(r.id)),
                                             collectedTotal: parseFloat(r.collectedTotal) || 0,
                                             discount: parseFloat(r.discount) || 0,
                                             targetMonth: tMonth
                                         };
                                     });
+                                    this.linkUnmatchedReports();
                                     this.removeDuplicateReports();
-                                    this.saveDataLocally();
-                                    this.syncToGoogle(true);
                                 }
                                 if (data.totalFundCapital !== undefined) this.totalFundCapital = parseFloat(data.totalFundCapital) || 0;
-                                if (data.monthlyExtraCapital) this.monthlyExtraCapital = data.monthlyExtraCapital;
+                                this.rememberReportClients();
                                 
                                 this.saveDataLocally();
                                 this.lastSyncTime = new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
@@ -1397,6 +1400,7 @@
                 confirmPayment() {
                     const client = this.payModal.client;
                     if (!client || client.status !== 'نشط') return;
+                    this.linkUnmatchedReports();
                     // إزالة بقايا سداد قديم بعد التراجع قبل تسجيل السداد الجديد.
                     this.reports.filter(r => String(r.clientId) === String(client.id) && r.type === 'سداد').forEach(r => {
                         delete this.getCashLedger().payments[r.id];
@@ -1423,6 +1427,7 @@
                         note: discount > 0 ? `تم السداد بخصم ${discount} ريال` : 'سداد كامل العقد'
                     });
                     this.getCashLedger().payments[paymentId] = this.payModal.method;
+                    this.rememberReportClients();
 
                     this.payModal.show = false;
                     this.saveData();
@@ -1507,6 +1512,7 @@
                     }
                 },
                 undoAction(client) {
+                    this.linkUnmatchedReports();
                     const type = client.status === 'ممدد' ? 'تمديد' : 'سداد';
                     const relatedReports = this.reports.filter(r =>
                         String(r.clientId) === String(client.id) && r.type === type
@@ -1541,6 +1547,7 @@
                         !(String(r.clientId) === String(client.id) && r.type === type)
                     );
                     relatedReports.forEach(r => { delete this.getCashLedger().payments[r.id]; });
+                    this.rememberReportClients();
                     client.status = 'نشط';
                     delete client.paidAt;
                     delete client.extendedAt;
@@ -1594,6 +1601,7 @@
                     }
                 },
                 saveData() {
+                    this.rememberReportClients();
                     this.saveDataLocally();
                     if (this.googleSyncUrl) this.syncToGoogle(true);
                 },
@@ -1605,20 +1613,36 @@
                     localStorage.setItem('mohla_fund_capital_v9', JSON.stringify(this.totalFundCapital));
                     localStorage.setItem('mohla_monthly_extra_v9', JSON.stringify(this.monthlyExtraCapital));
                 },
+                rememberReportClients() {
+                    const links = {};
+                    this.reports.forEach(r => { if (r.clientId != null) links[r.id] = r.clientId; });
+                    this.monthlyExtraCapital.__reportClients = links;
+                },
+                linkUnmatchedReports() {
+                    const links = this.monthlyExtraCapital.__reportClients || {};
+                    this.reports.forEach(r => {
+                        if (r.clientId != null) return;
+                        if (links[r.id] != null) { r.clientId = links[r.id]; return; }
+                        const candidates = this.clients.filter(c => c.status === (r.type === 'سداد' ? 'مسدد' : 'ممدد') &&
+                            c.name === r.clientName && this.normalizeMonth(c.targetMonth) === this.normalizeMonth(r.targetMonth) &&
+                            Math.abs((r.type === 'سداد' ? c.total : c.profit) - Number(r.discount || 0) - Number(r.collectedTotal || 0)) < 0.01);
+                        if (candidates.length === 1) r.clientId = candidates[0].id;
+                    });
+                },
                 removeDuplicateReports() {
-                    const seen = new Set();
-                    const cleaned = [];
-                    for (let i = this.reports.length - 1; i >= 0; i--) {
-                        const report = this.reports[i];
+                    const latestByKey = new Map();
+                    for (const report of this.reports) {
                         if (report.clientId === undefined || report.clientId === null) {
-                            cleaned.unshift(report);
                             continue;
                         }
                         const key = [report.clientId, report.type, this.normalizeMonth(report.targetMonth)].join('|');
-                        if (seen.has(key)) continue;
-                        seen.add(key);
-                        cleaned.unshift(report);
+                        const current = latestByKey.get(key);
+                        const currentId = Number(current?.id) || 0;
+                        const reportId = Number(report.id) || 0;
+                        if (!current || reportId >= currentId) latestByKey.set(key, report);
                     }
+                    const withoutClient = this.reports.filter(r => r.clientId === undefined || r.clientId === null);
+                    const cleaned = withoutClient.concat([...latestByKey.values()]);
                     if (cleaned.length !== this.reports.length) this.reports = cleaned;
                 },
                 normalizeMonth(value) {
