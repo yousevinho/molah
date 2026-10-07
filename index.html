@@ -775,7 +775,7 @@
                         </div>
                         <div class="flex justify-between">
                             <span class="text-gray-600">صافي ربح هذا الشهر بعد الخصم:</span>
-                            <strong class="text-emerald-700 font-bold">{{ Math.max(0, (extendModal.client?.profit || 0) - Math.min(30, extendModal.client?.profit || 0)).toLocaleString() }} ريال</strong>
+                            <strong class="text-emerald-700 font-bold">{{ (extendModal.client?.profit || 0).toLocaleString() }} ريال</strong>
                         </div>
                         <div class="flex justify-between border-t border-amber-200 pt-1.5 text-amber-900">
                             <span>الشهر القادم المُرحل إليه:</span>
@@ -783,12 +783,12 @@
                         </div>
                     </div>
 
-                    <p class="text-xs font-bold text-amber-900">خصم التمديد: {{ Math.min(30, extendModal.client?.profit || 0) }} ريال</p>
+                    <p class="text-xs font-bold text-amber-900">خصم التمديد: 0 ريال</p>
 
                     <!-- المبلغ المحصل الآن -->
                     <div class="bg-emerald-50 p-3.5 rounded-2xl border border-emerald-100 flex justify-between items-center text-sm font-black text-emerald-900">
                         <span>صافي الربح المحصل الآن (لهذا الشهر):</span>
-                        <span class="text-base text-emerald-700">{{ Math.max(0, (extendModal.client?.profit || 0) - Math.min(30, extendModal.client?.profit || 0)).toLocaleString() }} ريال</span>
+                        <span class="text-base text-emerald-700">{{ (extendModal.client?.profit || 0).toLocaleString() }} ريال</span>
                     </div>
 
                     <!-- توضيح مالي ذكي ومريح -->
@@ -796,7 +796,7 @@
                         <p class="font-bold flex items-center gap-1">
                             <i class="fa-solid fa-circle-info text-blue-600"></i> المعالجة الحسابية للتمديد:
                         </p>
-                        <p>1. يُسجل صافي الربح ({{ Math.max(0, (extendModal.client?.profit || 0) - Math.min(30, extendModal.client?.profit || 0)).toLocaleString() }} ريال) وخصم {{ Math.min(30, extendModal.client?.profit || 0) }} ريال في تقارير هذا الشهر.</p>
+                        <p>1. يُسجل كامل الربح ({{ (extendModal.client?.profit || 0).toLocaleString() }} ريال) بدون خصم في تقارير هذا الشهر.</p>
                         <p>2. يُرحّل رأس المال ({{ (extendModal.client?.principal || 0).toLocaleString() }} ريال) إلى شهر ({{ getNextMonthStr(extendModal.client?.targetMonth) }}) كعقد جديد ولا يُحسب على رأس مال الشهر الفائت.</p>
                     </div>
 
@@ -1500,7 +1500,7 @@
                     try {
                         const profit = client.profit || 0;
                         // التمديد يخصم 30 ريال افتراضيًا حتى لو أعاد المتصفح قيمة فارغة.
-                        const discount = Math.min(profit, 30);
+                        const discount = 0;
                         const collected = profit - discount;
                         const extensionId = Date.now() + Math.random();
 
