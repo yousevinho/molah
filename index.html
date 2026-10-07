@@ -1072,7 +1072,8 @@
                     );
                     const explicitDiscounts = monthReports.reduce((sum, r) => sum + (Number(r.discount) || 0), 0);
                     // صافي الربح يؤخذ من الحركة نفسها: التمديد صافي ربح، والسداد يستثني رأس المال.
-                    const netProfit = Math.max(0, monthReports.reduce((sum, r) => sum + this.getReportProfit(r), 0) + (extra * 0.30));
+                    // مجمل الأرباح الصافية = الأرباح المحصلة فعليًا من السداد والتمديد فقط.
+                    const netProfit = Math.max(0, monthReports.reduce((sum, r) => sum + this.getReportProfit(r), 0));
                     
                     // الربح المتوقع من رأس مال الشهر المعروض، بما فيه الكاش والإضافي.
                     const expectedProfit = Math.max(0, totalCapital * 0.30 - explicitDiscounts);
@@ -1118,7 +1119,7 @@
                         const mReports = this.reports.filter(r =>
                             monthClientIds.has(String(r.clientId)) || r.targetMonth === m
                         );
-                        let earned = mExtra * 0.30;
+                        let earned = 0;
                         const monthReports = this.reports.filter(r =>
                             new Set(mClients.map(c => String(c.id))).has(String(r.clientId)) || r.targetMonth === m
                         );
@@ -1153,9 +1154,6 @@
                     const totalDiscounts = this.reports.reduce((sum, r) => sum + (Number(r.discount) || 0), 0);
                     
                     let totalEarned = 0;
-                    Object.keys(this.monthlyExtraCapital).filter(m => /^\d{4}-\d{2}$/.test(m)).forEach(m => {
-                        totalEarned += (this.monthlyExtraCapital[m] || 0) * 0.30;
-                    });
                     this.reports.forEach(r => { totalEarned += this.getReportProfit(r); });
                     const totalNetProfitAllTime = Math.max(0, totalEarned);
                     
