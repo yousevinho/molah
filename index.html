@@ -1062,7 +1062,7 @@
                     const cashUses = this.monthlyExtraCapital.__cash?.uses || {};
                     const openingMonth = this.allMonths[this.allMonths.length - 1];
                     const contractsCapital = monthClients
-                        .filter(c => !c.excludeFromCapital && (this.selectedMonth !== openingMonth || c.status !== 'ممدد'))
+                        .filter(c => this.countsTowardMonthlyCapital(c, this.selectedMonth, openingMonth))
                         .reduce((sum, c) => sum + (Number(c.principal) || 0) - (Number(cashUses[c.id]) || 0), 0);
                     const totalCapital = this.availableCash + contractsCapital + extra;
                     
@@ -1111,7 +1111,7 @@
                         const cashUses = this.monthlyExtraCapital.__cash?.uses || {};
                         const openingMonth = this.allMonths[this.allMonths.length - 1];
                         const contractsCapital = mClients
-                            .filter(c => !c.excludeFromCapital && (m !== openingMonth || c.status !== 'ممدد'))
+                            .filter(c => this.countsTowardMonthlyCapital(c, m, openingMonth))
                             .reduce((sum, c) => sum + (Number(c.principal) || 0) - (Number(cashUses[c.id]) || 0), 0);
                         const capital = mExtra + this.cashAvailableForMonth(m) + contractsCapital;
                         
@@ -1171,6 +1171,11 @@
                 }
             },
             methods: {
+                countsTowardMonthlyCapital(client, month, openingMonth) {
+                    if (client.excludeFromCapital === true) return false;
+                    if (month === openingMonth) return client.status !== 'ممدد';
+                    return this.isCarriedIntoMonth(client, month);
+                },
                 goToMonth(month) {
                     this.selectedMonth = month;
                     this.activeTab = 'dashboard';
@@ -1304,7 +1309,9 @@
                             if (!promptConfirm || confirm(`تم العثور في قوقل على (${cCount}) عميل و (${rCount}) حركة.\nهل تريد تحديث البرنامج بها؟`)) {
                                 if (data.monthlyExtraCapital) this.monthlyExtraCapital = data.monthlyExtraCapital;
                                 if (data.clients && Array.isArray(data.clients)) {
+                                    const localClientsById = new Map(this.clients.map(c => [String(c.id), c]));
                                     this.clients = data.clients.map(c => {
+                                        const localClient = localClientsById.get(String(c.id));
                                         let tMonth = String(c.targetMonth || '');
                                         let dDate = String(c.dueDate || '');
                                         if (tMonth) {
@@ -1321,7 +1328,9 @@
                                             profit: parseFloat(c.profit) || 0,
                                             total: parseFloat(c.total) || 0,
                                             targetMonth: tMonth,
-                                            dueDate: dDate
+                                            dueDate: dDate,
+                                            // Google Sheets القديمة لا تحفظ هذا الحقل؛ حافظ على علامة العميل المحلية.
+                                            excludeFromCapital: c.excludeFromCapital === true || localClient?.excludeFromCapital === true
                                         };
                                     });
                                     this.removeDuplicateCarriedClients();
