@@ -1062,7 +1062,7 @@
                     const cashUses = this.monthlyExtraCapital.__cash?.uses || {};
                     const openingMonth = this.allMonths[this.allMonths.length - 1];
                     const contractsCapital = monthClients
-                        .filter(c => this.selectedMonth !== openingMonth || c.status !== 'ممدد')
+                        .filter(c => !c.excludeFromCapital && (this.selectedMonth !== openingMonth || c.status !== 'ممدد'))
                         .reduce((sum, c) => sum + (Number(c.principal) || 0) - (Number(cashUses[c.id]) || 0), 0);
                     const totalCapital = this.availableCash + contractsCapital + extra;
                     
@@ -1112,7 +1112,7 @@
                         const cashUses = this.monthlyExtraCapital.__cash?.uses || {};
                         const openingMonth = this.allMonths[this.allMonths.length - 1];
                         const contractsCapital = mClients
-                            .filter(c => m !== openingMonth || c.status !== 'ممدد')
+                            .filter(c => !c.excludeFromCapital && (m !== openingMonth || c.status !== 'ممدد'))
                             .reduce((sum, c) => sum + (Number(c.principal) || 0) - (Number(cashUses[c.id]) || 0), 0);
                         const capital = mExtra + this.cashAvailableForMonth(m) + contractsCapital;
                         
@@ -1370,13 +1370,12 @@
                 addSingleClient() {
                     if (!this.newClient.name || !this.newClient.principal) return;
                     const principal = Number(this.newClient.principal);
-                    if (!Number.isFinite(principal) || principal <= 0 || principal > this.availableCash) {
-                        alert('رأس مال العقد يجب ألا يتجاوز الكاش المتاح. أضف رأس المال إلى الكاش أولاً إذا كان المبلغ جديداً.');
+                    if (!Number.isFinite(principal) || principal <= 0) {
+                        alert('أدخل رأس مال صحيحًا أكبر من صفر.');
                         return;
                     }
                     this.addClientData(this.newClient.name, this.newClient.phone, parseFloat(this.newClient.principal), this.selectedMonth);
-                    const ledger = this.getCashLedger();
-                    ledger.uses[this.clients[this.clients.length - 1].id] = principal;
+                    this.clients[this.clients.length - 1].excludeFromCapital = true;
                     this.newClient = { name: '', phone: '', principal: '' };
                     this.saveData();
                 },
@@ -1670,14 +1669,17 @@
                             if(row.length >= 3 && row[0] && row[2]) {
                                 const principal = parseFloat(row[2]);
                                 if(!isNaN(principal)) {
+                                    if (principal <= 0) continue;
                                     this.addClientData(row[0], row[1], principal, this.importMonth);
+                                    const importedClient = this.clients[this.clients.length - 1];
+                                    importedClient.excludeFromCapital = true;
                                     importedCount++;
                                 }
                             }
                         }
                         if (importedCount > 0) {
                             this.saveData();
-                            alert(`تم استيراد ${importedCount} عميل بنجاح!`);
+                            alert(`تم استيراد ${importedCount} عميل بنجاح.`);
                             this.selectedMonth = this.importMonth;
                             this.activeTab = 'dashboard';
                         }
