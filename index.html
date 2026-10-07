@@ -359,7 +359,7 @@
                         <div class="bg-white p-3.5 sm:p-4 rounded-2xl shadow-xs border border-gray-200 border-b-4 border-b-blue-500 min-w-0">
                             <h3 class="text-xs font-bold text-gray-600 mb-1 leading-snug">كامل رأس مال الشهر</h3>
                             <p class="text-lg sm:text-xl md:text-2xl font-black text-blue-900">{{ monthlyStats.totalCapital.toLocaleString() }} <span class="text-[10px] sm:text-xs font-normal text-gray-400">ريال</span></p>
-                            <span class="text-[10px] sm:text-[11px] text-gray-400 mt-1 block">العقود والكاش غير المستثمر والإضافي</span>
+                            <span class="text-[10px] sm:text-[11px] text-gray-400 mt-1 block">الكاش المتاح ورأس المال المضاف</span>
                         </div>
                         <div class="bg-white p-3.5 sm:p-4 rounded-2xl shadow-xs border border-gray-200 border-b-4 border-b-cyan-500 min-w-0">
                             <h3 class="text-xs font-bold text-gray-600 mb-1 leading-snug">الكاش المتاح</h3>
@@ -1138,9 +1138,13 @@
                         totalCapitalAllTime += mExtra + this.cashAvailableForMonth(m);
                     });
                     
+                    // النشط بالسوق هو إجمالي ما سيُحصّل من العقود غير المسددة: رأس المال + ربح 30%.
                     const activeCapital = this.clients
                         .filter(c => c.status === 'نشط')
-                        .reduce((sum, c) => sum + (c.principal || 0), 0);
+                        .reduce((sum, c) => {
+                            const principal = Number(c.principal) || 0;
+                            return sum + principal + (Number(c.profit) || principal * 0.30);
+                        }, 0);
                         
                     const totalDiscounts = this.reports.reduce((sum, r) => sum + (Number(r.discount) || 0), 0);
                     
