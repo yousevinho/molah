@@ -412,6 +412,10 @@
                                     <label class="block text-xs font-bold text-gray-700 mb-1.5">رأس المال (المبلغ الأساسي):</label>
                                     <input type="number" v-model="newClient.principal" placeholder="المبلغ بالريال" required min="1" class="w-full px-3.5 py-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-xs md:text-sm bg-white shadow-xs">
                                 </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-700 mb-1.5">من كاش الشهر السابق (المتاح {{ availableCash.toLocaleString() }} ريال):</label>
+                                    <input type="number" v-model.number="newClient.cashUsed" min="0" :max="Math.min(availableCash, Number(newClient.principal) || 0)" placeholder="0" class="w-full px-3.5 py-2.5 border rounded-xl text-sm bg-white">
+                                </div>
                                 <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl transition shadow text-xs md:text-sm h-[42px] flex items-center justify-center gap-2">
                                     <i class="fa-solid fa-plus"></i> إضافة العميل
                                 </button>
@@ -610,6 +614,7 @@
                                     <span class="text-gray-500">المحصل: <strong class="text-emerald-700">{{ r.collectedTotal.toLocaleString() }} ريال</strong></span>
                                     <span v-if="r.discount > 0" class="text-red-600 font-bold">خصم: {{ r.discount.toLocaleString() }}</span>
                                 </div>
+                                <p v-if="r.type === 'سداد'" class="text-[10px] text-gray-600">طريقة السداد: {{ monthlyExtraCapital.__cash?.payments?.[r.id] || 'غير محددة' }}</p>
                                 <p v-if="r.note" class="text-[10px] text-gray-500 bg-white p-2 rounded-lg border border-gray-100">{{ r.note }}</p>
                             </div>
                         </div>
@@ -641,7 +646,7 @@
                                         </td>
                                         <td class="py-3.5 px-4 font-bold text-emerald-700">{{ r.collectedTotal.toLocaleString() }} ريال</td>
                                         <td class="py-3.5 px-4 text-red-600 font-bold">{{ r.discount ? r.discount.toLocaleString() + ' ريال' : '-' }}</td>
-                                        <td class="py-3.5 px-4 text-gray-500">{{ r.note || '-' }}</td>
+                                        <td class="py-3.5 px-4 text-gray-500">{{ r.type === 'سداد' ? 'طريقة السداد: ' + (monthlyExtraCapital.__cash?.payments?.[r.id] || 'غير محددة') + ' | ' : '' }}{{ r.note || '-' }}</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -717,6 +722,12 @@
                     <div>
                         <label class="block text-xs font-bold text-gray-700 mb-1">خصم ممنوح للعميل (إن وُجد):</label>
                         <input type="number" v-model.number="payModal.discount" min="0" :max="payModal.client?.profit" placeholder="0" class="w-full px-3 py-2 border rounded-xl text-sm font-bold text-center outline-none focus:ring-2 focus:ring-emerald-500 bg-gray-50">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 mb-1">طريقة السداد:</label>
+                        <select v-model="payModal.method" class="w-full px-3 py-2 border rounded-xl text-sm bg-white">
+                            <option value="تحويل">تحويل</option><option value="كاش">كاش</option>
+                        </select>
                     </div>
                     <div class="bg-emerald-50 p-3 rounded-2xl border border-emerald-100 flex justify-between items-center text-sm font-black text-emerald-900">
                         <span>المبلغ النهائي المحصل:</span>
@@ -936,8 +947,8 @@
                     clients: [],
                     reports: [],
                     
-                    newClient: { name: '', phone: '', principal: '' },
-                    payModal: { show: false, client: null, discount: 0 },
+                    newClient: { name: '', phone: '', principal: '', cashUsed: 0 },
+                    payModal: { show: false, client: null, discount: 0, method: 'تحويل' },
                     extendModal: { show: false, client: null, discount: 30 },
                      isProcessingExtension: false,
                     capitalModal: { show: false, type: 'add', amount: '' },
@@ -952,6 +963,15 @@
                 }
             },
             computed: {
+                availableCash() {
+                    const previousMonth = this.getPreviousMonthStr(this.selectedMonth);
+                    const ledger = this.monthlyExtraCapital.__cash || { payments: {}, uses: {} };
+                    const received = this.reports.filter(r => r.type === 'سداد' && r.targetMonth === previousMonth && ledger.payments?.[r.id] === 'كاش')
+                        .reduce((sum, r) => sum + (Number(r.collectedTotal) || 0), 0);
+                    const used = this.clients.filter(c => c.targetMonth === this.selectedMonth)
+                        .reduce((sum, c) => sum + (Number(ledger.uses?.[c.id]) || 0), 0);
+                    return Math.max(0, received - used);
+                },
                 currentMonthExtra: {
                     get() {
                         return this.monthlyExtraCapital[this.selectedMonth] || 0;
@@ -1035,7 +1055,7 @@
                     const months = new Set();
                     this.clients.forEach(c => { if (c.targetMonth) months.add(c.targetMonth); });
                     this.reports.forEach(r => { if (r.targetMonth) months.add(r.targetMonth); });
-                    Object.keys(this.monthlyExtraCapital).forEach(m => {
+                    Object.keys(this.monthlyExtraCapital).filter(m => /^\d{4}-\d{2}$/.test(m)).forEach(m => {
                         if (this.monthlyExtraCapital[m] > 0) months.add(m);
                     });
                     return Array.from(months).sort().reverse();
@@ -1085,7 +1105,7 @@
                     const totalDiscounts = this.reports.reduce((sum, r) => sum + (Number(r.discount) || 0), 0);
                     
                     let totalEarned = 0;
-                    Object.keys(this.monthlyExtraCapital).forEach(m => {
+                    Object.keys(this.monthlyExtraCapital).filter(m => /^\d{4}-\d{2}$/.test(m)).forEach(m => {
                         totalEarned += (this.monthlyExtraCapital[m] || 0) * 0.30;
                     });
                     this.reports.forEach(r => { totalEarned += this.getReportProfit(r); });
@@ -1296,9 +1316,28 @@
                 },
                 addSingleClient() {
                     if (!this.newClient.name || !this.newClient.principal) return;
+                    const principal = Number(this.newClient.principal);
+                    const cashUsed = Number(this.newClient.cashUsed) || 0;
+                    if (!Number.isFinite(principal) || principal <= 0 || !Number.isFinite(cashUsed) || cashUsed < 0 || cashUsed > principal || cashUsed > this.availableCash) {
+                        alert('مبلغ الكاش يجب ألا يتجاوز رأس مال العقد أو الرصيد المتاح.');
+                        return;
+                    }
                     this.addClientData(this.newClient.name, this.newClient.phone, parseFloat(this.newClient.principal), this.selectedMonth);
-                    this.newClient = { name: '', phone: '', principal: '' };
+                    if (cashUsed > 0) {
+                        const ledger = this.getCashLedger();
+                        ledger.uses[this.clients[this.clients.length - 1].id] = cashUsed;
+                    }
+                    this.newClient = { name: '', phone: '', principal: '', cashUsed: 0 };
                     this.saveData();
+                },
+                getCashLedger() {
+                    if (!this.monthlyExtraCapital.__cash) this.monthlyExtraCapital.__cash = { payments: {}, uses: {} };
+                    return this.monthlyExtraCapital.__cash;
+                },
+                getPreviousMonthStr(monthStr) {
+                    const [y, m] = monthStr.split('-').map(Number);
+                    const d = new Date(y, m - 2, 1);
+                    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
                 },
                 addClientData(name, phone, principal, month) {
                     const profit = principal * 0.30;
@@ -1322,6 +1361,8 @@
                 },
                 deleteClient(client) {
                     if (confirm(`هل أنت متأكد من حذف العقد الخاص بـ "${client.name}"؟`)) {
+                        const ledger = this.getCashLedger();
+                        delete ledger.uses[client.id];
                         this.clients = this.clients.filter(c => c.id !== client.id);
                         this.reports = this.reports.filter(r => r.clientId !== client.id);
                         this.saveData();
@@ -1349,13 +1390,17 @@
                     this.payModal = {
                         show: true,
                         client: client,
-                        discount: 0
+                        discount: 0,
+                        method: 'تحويل'
                     };
                 },
                 confirmPayment() {
                     const client = this.payModal.client;
                     if (!client || client.status !== 'نشط') return;
                     // إزالة بقايا سداد قديم بعد التراجع قبل تسجيل السداد الجديد.
+                    this.reports.filter(r => String(r.clientId) === String(client.id) && r.type === 'سداد').forEach(r => {
+                        delete this.getCashLedger().payments[r.id];
+                    });
                     this.reports = this.reports.filter(r =>
                         !(String(r.clientId) === String(client.id) && r.type === 'سداد')
                     );
@@ -1365,8 +1410,9 @@
 
                     client.status = 'مسدد';
                     client.paidAt = Date.now(); // حركة: ينزل العقد للأسفل فور السداد
+                    const paymentId = Date.now() + Math.random();
                     this.reports.push({
-                        id: Date.now(),
+                        id: paymentId,
                         clientId: client.id,
                         targetMonth: client.targetMonth,
                         date: new Date().toISOString().split('T')[0],
@@ -1376,6 +1422,7 @@
                         discount: discount,
                         note: discount > 0 ? `تم السداد بخصم ${discount} ريال` : 'سداد كامل العقد'
                     });
+                    this.getCashLedger().payments[paymentId] = this.payModal.method;
 
                     this.payModal.show = false;
                     this.saveData();
@@ -1464,6 +1511,17 @@
                     const relatedReports = this.reports.filter(r =>
                         String(r.clientId) === String(client.id) && r.type === type
                     );
+                    if (type === 'سداد' && relatedReports.some(r => this.getCashLedger().payments[r.id] === 'كاش')) {
+                        const nextMonth = this.getNextMonthStr(client.targetMonth);
+                        const ledger = this.getCashLedger();
+                        const used = this.clients.filter(c => c.targetMonth === nextMonth).reduce((sum, c) => sum + (Number(ledger.uses[c.id]) || 0), 0);
+                        const remaining = this.reports.filter(r => r.type === 'سداد' && r.targetMonth === client.targetMonth && !relatedReports.includes(r) && ledger.payments[r.id] === 'كاش')
+                            .reduce((sum, r) => sum + (Number(r.collectedTotal) || 0), 0);
+                        if (used > remaining) {
+                            alert('لا يمكن التراجع عن سداد الكاش: المبلغ مستخدم في عقود الشهر التالي. احذف أو عدل تلك العقود أولًا.');
+                            return;
+                        }
+                    }
                     const nextMonth = client.status === 'ممدد' ? this.getNextMonthStr(client.targetMonth) : null;
                     const extensionIds = new Set(relatedReports.map(r => String(r.extensionId || r.id)));
                     const carriedClients = nextMonth ? this.clients.filter(c =>
@@ -1482,6 +1540,7 @@
                     this.reports = this.reports.filter(r =>
                         !(String(r.clientId) === String(client.id) && r.type === type)
                     );
+                    relatedReports.forEach(r => { delete this.getCashLedger().payments[r.id]; });
                     client.status = 'نشط';
                     delete client.paidAt;
                     delete client.extendedAt;
