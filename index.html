@@ -1057,12 +1057,12 @@
                     const cashDeposit = Number(this.monthlyExtraCapital.__cash?.deposits?.[this.selectedMonth]) || 0;
                     const monthClients = this.clients.filter(client => client.targetMonth === this.selectedMonth);
                     
-                    // رأس مال الشهر = الكاش المتاح + رأس مال العقود المرحّلة + الإضافات.
-                    // العقد الجديد المموّل من الكاش يخفض الكاش، فلا يضاف مرة ثانية إلى الإجمالي.
-                    const carriedPrincipal = monthClients
-                        .filter(c => this.isCarriedIntoMonth(c, this.selectedMonth))
-                        .reduce((sum, c) => sum + (Number(c.principal) || 0), 0);
-                    const totalCapital = this.availableCash + carriedPrincipal + extra;
+                    // العقود الأصلية والمرحّلة تُحسب في شهرها حتى بعد التمديد.
+                    // الجزء المستثمر من كاش الشهر لا يضاف مرة ثانية إلى رأس المال.
+                    const cashUses = this.monthlyExtraCapital.__cash?.uses || {};
+                    const contractsCapital = monthClients.reduce((sum, c) =>
+                        sum + (Number(c.principal) || 0) - (Number(cashUses[c.id]) || 0), 0);
+                    const totalCapital = this.availableCash + contractsCapital + extra;
                     
                     const monthClientIds = new Set(monthClients.map(c => String(c.id)));
                     const monthReports = this.reports.filter(r =>
@@ -1107,11 +1107,10 @@
                     return this.allMonths.map(m => {
                         const mClients = this.clients.filter(c => c.targetMonth === m);
                         const mExtra = this.monthlyExtraCapital[m] || 0;
-                        // رأس مال الشهر يستثني الممدد المرحل للشهر القادم
-                        const carriedPrincipal = mClients
-                            .filter(c => this.isCarriedIntoMonth(c, m))
-                            .reduce((sum, c) => sum + (Number(c.principal) || 0), 0);
-                        const capital = mExtra + this.cashAvailableForMonth(m) + carriedPrincipal;
+                        const cashUses = this.monthlyExtraCapital.__cash?.uses || {};
+                        const contractsCapital = mClients.reduce((sum, c) =>
+                            sum + (Number(c.principal) || 0) - (Number(cashUses[c.id]) || 0), 0);
+                        const capital = mExtra + this.cashAvailableForMonth(m) + contractsCapital;
                         
                         const monthClientIds = new Set(mClients.map(c => String(c.id)));
                         const mReports = this.reports.filter(r =>
