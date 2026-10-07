@@ -1060,8 +1060,10 @@
                     // العقود الأصلية والمرحّلة تُحسب في شهرها حتى بعد التمديد.
                     // الجزء المستثمر من كاش الشهر لا يضاف مرة ثانية إلى رأس المال.
                     const cashUses = this.monthlyExtraCapital.__cash?.uses || {};
-                    const contractsCapital = monthClients.reduce((sum, c) =>
-                        sum + (Number(c.principal) || 0) - (Number(cashUses[c.id]) || 0), 0);
+                    const openingMonth = this.allMonths[this.allMonths.length - 1];
+                    const contractsCapital = monthClients
+                        .filter(c => this.selectedMonth !== openingMonth || c.status !== 'ممدد')
+                        .reduce((sum, c) => sum + (Number(c.principal) || 0) - (Number(cashUses[c.id]) || 0), 0);
                     const totalCapital = this.availableCash + contractsCapital + extra;
                     
                     const monthClientIds = new Set(monthClients.map(c => String(c.id)));
@@ -1108,8 +1110,10 @@
                         const mClients = this.clients.filter(c => c.targetMonth === m);
                         const mExtra = this.monthlyExtraCapital[m] || 0;
                         const cashUses = this.monthlyExtraCapital.__cash?.uses || {};
-                        const contractsCapital = mClients.reduce((sum, c) =>
-                            sum + (Number(c.principal) || 0) - (Number(cashUses[c.id]) || 0), 0);
+                        const openingMonth = this.allMonths[this.allMonths.length - 1];
+                        const contractsCapital = mClients
+                            .filter(c => m !== openingMonth || c.status !== 'ممدد')
+                            .reduce((sum, c) => sum + (Number(c.principal) || 0) - (Number(cashUses[c.id]) || 0), 0);
                         const capital = mExtra + this.cashAvailableForMonth(m) + contractsCapital;
                         
                         const monthClientIds = new Set(mClients.map(c => String(c.id)));
