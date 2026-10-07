@@ -1130,14 +1130,11 @@
                     return this.clients.length;
                 },
                 globalStats() {
-                    let totalCapitalAllTime = 0;
-                    this.allMonths.forEach(m => {
-                        const mClients = this.clients.filter(c => c.targetMonth === m);
-                        const mExtra = this.monthlyExtraCapital[m] || 0;
-                        // منع ازدواجية رأس المال: الممدد لا يحسب على الشهر السابق بل على الشهر المرحل إليه
-                        totalCapitalAllTime += mExtra + this.cashAvailableForMonth(m);
-                    });
-                    
+                    // رأس المال المُقسط: أصل العقود النشطة غير المسددة فقط، دون الأرباح.
+                    const totalCapitalAllTime = this.clients
+                        .filter(c => c.status === 'نشط')
+                        .reduce((sum, c) => sum + (Number(c.principal) || 0), 0);
+
                     // النشط بالسوق هو إجمالي ما سيُحصّل من العقود غير المسددة: رأس المال + ربح 30%.
                     const activeCapital = this.clients
                         .filter(c => c.status === 'نشط')
