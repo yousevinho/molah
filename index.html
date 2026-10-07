@@ -416,6 +416,13 @@
                                     <label class="block text-xs font-bold text-gray-700 mb-1.5">من كاش الشهر السابق (المتاح {{ availableCash.toLocaleString() }} ريال):</label>
                                     <input type="number" v-model.number="newClient.cashUsed" min="0" :max="Math.min(availableCash, Number(newClient.principal) || 0)" placeholder="0" class="w-full px-3.5 py-2.5 border rounded-xl text-sm bg-white">
                                 </div>
+                                <div class="flex items-end gap-2">
+                                    <div class="min-w-0 flex-1">
+                                        <label class="block text-xs font-bold text-gray-700 mb-1.5">إنقاص من الكاش (المخصوم {{ Number(monthlyExtraCapital.__cash?.withdrawals?.[selectedMonth] || 0).toLocaleString() }} ريال):</label>
+                                        <input type="number" v-model.number="cashWithdrawal" min="0" :max="availableCash" placeholder="المبلغ" class="w-full px-3.5 py-2.5 border rounded-xl text-sm bg-white">
+                                    </div>
+                                    <button type="button" @click="withdrawCash" class="h-[42px] px-3 bg-rose-600 text-white rounded-lg text-xs font-bold" title="خصم المبلغ من كاش الشهر السابق"><i class="fa-solid fa-minus"></i> خصم</button>
+                                </div>
                                 <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl transition shadow text-xs md:text-sm h-[42px] flex items-center justify-center gap-2">
                                     <i class="fa-solid fa-plus"></i> إضافة العميل
                                 </button>
@@ -441,6 +448,13 @@
                                          <option value="نشط">لم يدفع</option>
                                      </select>
                                  </label>
+                                <label class="flex items-center gap-1.5 font-bold text-gray-700">
+                                    <select v-model="paymentMethodFilter" class="border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-xs font-bold text-gray-700" aria-label="فلتر طريقة السداد">
+                                        <option value="الكل">كل طرق السداد</option>
+                                        <option value="كاش">دفع كاش</option>
+                                        <option value="تحويل">دفع تحويل</option>
+                                    </select>
+                                </label>
                                 <span class="flex items-center"><span class="w-3 h-3 bg-white border-2 border-emerald-500 rounded-full inline-block ml-1"></span> نشط (غير مسدد)</span>
                                 <span class="flex items-center"><span class="w-3 h-3 bg-amber-400 rounded-full inline-block ml-1"></span> ممدد (مُرحل)</span>
                                 <span class="flex items-center"><span class="w-3 h-3 bg-emerald-500 rounded-full inline-block ml-1"></span> مسدد (مكتمل)</span>
@@ -459,7 +473,7 @@
                                     </div>
                                     <div>
                                         <span v-if="client.status === 'مسدد'" class="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] px-2.5 py-0.5 rounded-full font-bold">
-                                            <i class="fa-solid fa-check text-[9px]"></i> تم السداد
+                                            <i class="fa-solid fa-check text-[9px]"></i> تم السداد {{ getPaymentMethod(client) || '' }}
                                         </span>
                                         <span v-else-if="client.status === 'ممدد'" class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] px-2.5 py-0.5 rounded-full font-bold">
                                             <i class="fa-solid fa-clock-rotate-left text-[9px]"></i> ممدد
@@ -567,7 +581,7 @@
                                                     </button>
                                                 </template>
                                                 <div v-if="client.status === 'مسدد'" class="inline-flex items-center bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl px-3 py-1 text-xs font-bold shadow-xs">
-                                                    <i class="fa-solid fa-check ml-1.5 text-emerald-600"></i> تم السداد
+                                                    <i class="fa-solid fa-check ml-1.5 text-emerald-600"></i> تم السداد {{ getPaymentMethod(client) }}
                                                     <button @click="undoAction(client)" class="mr-2 text-emerald-700 hover:text-red-500 transition" title="تراجع"><i class="fa-solid fa-rotate-left"></i></button>
                                                 </div>
                                                 <div v-if="client.status === 'ممدد'" class="inline-flex items-center bg-amber-100 text-amber-900 border border-amber-300 rounded-xl px-3 py-1 text-xs font-bold shadow-xs">
@@ -937,7 +951,9 @@
                 return {
                     activeTab: 'dashboard',
                     selectedMonth: savedMonth || currentMonthStr,
-                     clientStatusFilter: 'الكل',
+                    clientStatusFilter: 'الكل',
+                    paymentMethodFilter: 'الكل',
+                    cashWithdrawal: '',
                     importMonth: currentMonthStr,
                     searchQuery: '',
                     
@@ -970,7 +986,8 @@
                         .reduce((sum, r) => sum + (Number(r.collectedTotal) || 0), 0);
                     const used = this.clients.filter(c => c.targetMonth === this.selectedMonth)
                         .reduce((sum, c) => sum + (Number(ledger.uses?.[c.id]) || 0), 0);
-                    return Math.max(0, received - used);
+                    const withdrawn = Number(ledger.withdrawals?.[this.selectedMonth]) || 0;
+                    return Math.max(0, received - used - withdrawn);
                 },
                 currentMonthExtra: {
                     get() {
@@ -988,7 +1005,8 @@
                 filteredClients() {
                     const list = this.clients.filter(client =>
                         client.targetMonth === this.selectedMonth &&
-                        (this.clientStatusFilter === 'الكل' || client.status === this.clientStatusFilter)
+                        (this.clientStatusFilter === 'الكل' || client.status === this.clientStatusFilter) &&
+                        (this.paymentMethodFilter === 'الكل' || (client.status === 'مسدد' && this.getPaymentMethod(client) === this.paymentMethodFilter))
                     );
                     // العقد الذي تغيرت حالته ينزل أسفل العقود النشطة.
                     return list.slice().sort((a, b) => {
@@ -1334,8 +1352,25 @@
                     this.saveData();
                 },
                 getCashLedger() {
-                    if (!this.monthlyExtraCapital.__cash) this.monthlyExtraCapital.__cash = { payments: {}, uses: {} };
+                    if (!this.monthlyExtraCapital.__cash) this.monthlyExtraCapital.__cash = { payments: {}, uses: {}, withdrawals: {} };
+                    if (!this.monthlyExtraCapital.__cash.withdrawals) this.monthlyExtraCapital.__cash.withdrawals = {};
                     return this.monthlyExtraCapital.__cash;
+                },
+                getPaymentMethod(client) {
+                    const report = this.reports.find(r => r.type === 'سداد' && String(r.clientId) === String(client.id));
+                    return report ? (this.monthlyExtraCapital.__cash?.payments?.[report.id] || '') : '';
+                },
+                withdrawCash() {
+                    const amount = Number(this.cashWithdrawal);
+                    if (!Number.isFinite(amount) || amount <= 0 || amount > this.availableCash) {
+                        alert('أدخل مبلغًا أكبر من صفر ولا يتجاوز الكاش المتاح.');
+                        return;
+                    }
+                    if (!confirm(`خصم ${amount.toLocaleString()} ريال من كاش الشهر السابق؟`)) return;
+                    const ledger = this.getCashLedger();
+                    ledger.withdrawals[this.selectedMonth] = (Number(ledger.withdrawals[this.selectedMonth]) || 0) + amount;
+                    this.cashWithdrawal = '';
+                    this.saveData();
                 },
                 getPreviousMonthStr(monthStr) {
                     const [y, m] = monthStr.split('-').map(Number);
@@ -1520,7 +1555,7 @@
                     if (type === 'سداد' && relatedReports.some(r => this.getCashLedger().payments[r.id] === 'كاش')) {
                         const nextMonth = this.getNextMonthStr(client.targetMonth);
                         const ledger = this.getCashLedger();
-                        const used = this.clients.filter(c => c.targetMonth === nextMonth).reduce((sum, c) => sum + (Number(ledger.uses[c.id]) || 0), 0);
+                        const used = this.clients.filter(c => c.targetMonth === nextMonth).reduce((sum, c) => sum + (Number(ledger.uses[c.id]) || 0), 0) + (Number(ledger.withdrawals[nextMonth]) || 0);
                         const remaining = this.reports.filter(r => r.type === 'سداد' && r.targetMonth === client.targetMonth && !relatedReports.includes(r) && ledger.payments[r.id] === 'كاش')
                             .reduce((sum, r) => sum + (Number(r.collectedTotal) || 0), 0);
                         if (used > remaining) {
