@@ -1057,12 +1057,9 @@
                     const cashDeposit = Number(this.monthlyExtraCapital.__cash?.deposits?.[this.selectedMonth]) || 0;
                     const monthClients = this.clients.filter(client => client.targetMonth === this.selectedMonth);
                     
-                    // رأس المال الأساسي للشهر: يستثني العقود الممددة لأن رأس مالها رُحل للشهر القادم ولا يُحسب على الشهر الفائت
-                    const activeOrPaidClients = monthClients.filter(c => c.status !== 'ممدد');
-                    // الاستثمار من الكاش ينقل المبلغ من الكاش إلى العقد؛ لذلك لا ينقص إجمالي رأس المال.
-                    // رأس المال الإضافي يضاف مرة واحدة فقط، بينما الكاش المتاح هو الرصيد غير المستثمر.
-                    const investedPrincipal = activeOrPaidClients.reduce((sum, c) => sum + (Number(c.principal) || 0), 0);
-                    const totalCapital = investedPrincipal + this.availableCash + extra;
+                    // رأس مال الشهر هو الرصيد النقدي المتاح مع الإضافات فقط.
+                    // عند إضافة عميل من الكاش ينخفض هذا الرصيد، لذلك لا نعيد إضافة رأس مال العقد هنا.
+                    const totalCapital = this.availableCash + extra;
                     
                     const monthClientIds = new Set(monthClients.map(c => String(c.id)));
                     const monthReports = this.reports.filter(r =>
@@ -1074,7 +1071,7 @@
                     
                     // إجمالي الأرباح المتوقعة للشهر (تشمل أرباح العقود الممددة المحصلة لهذا الشهر)
                     const mendedProfit = monthClients.filter(c => c.status === 'ممدد').reduce((sum, c) => sum + (c.profit || 0), 0);
-                    const grossExpectedProfit = (investedPrincipal * 0.30) + mendedProfit + (extra * 0.30);
+                    const grossExpectedProfit = (monthClients.filter(c => c.status !== 'ممدد').reduce((sum, c) => sum + (Number(c.principal) || 0), 0) * 0.30) + mendedProfit + (extra * 0.30);
                     const expectedProfit = Math.max(0, grossExpectedProfit - explicitDiscounts);
                     
                     // باقي غير المسدد في السوق للشهر الحالي: فقط العقود النشطة التي لم تسدد بعد
@@ -1108,7 +1105,7 @@
                         const mClients = this.clients.filter(c => c.targetMonth === m);
                         const mExtra = this.monthlyExtraCapital[m] || 0;
                         // رأس مال الشهر يستثني الممدد المرحل للشهر القادم
-                        const capital = mClients.filter(c => c.status !== 'ممدد').reduce((sum, c) => sum + (c.principal || 0), 0) + mExtra + this.cashAvailableForMonth(m);
+                        const capital = mExtra + this.cashAvailableForMonth(m);
                         
                         const monthClientIds = new Set(mClients.map(c => String(c.id)));
                         const mReports = this.reports.filter(r =>
@@ -1138,7 +1135,7 @@
                         const mClients = this.clients.filter(c => c.targetMonth === m);
                         const mExtra = this.monthlyExtraCapital[m] || 0;
                         // منع ازدواجية رأس المال: الممدد لا يحسب على الشهر السابق بل على الشهر المرحل إليه
-                        totalCapitalAllTime += mClients.filter(c => c.status !== 'ممدد').reduce((sum, c) => sum + (c.principal || 0), 0) + mExtra + this.cashAvailableForMonth(m);
+                        totalCapitalAllTime += mExtra + this.cashAvailableForMonth(m);
                     });
                     
                     const activeCapital = this.clients
