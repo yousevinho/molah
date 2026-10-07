@@ -1074,10 +1074,8 @@
                     // صافي الربح يؤخذ من الحركة نفسها: التمديد صافي ربح، والسداد يستثني رأس المال.
                     const netProfit = Math.max(0, monthReports.reduce((sum, r) => sum + this.getReportProfit(r), 0) + (extra * 0.30));
                     
-                    // إجمالي الأرباح المتوقعة للشهر (تشمل أرباح العقود الممددة المحصلة لهذا الشهر)
-                    const mendedProfit = monthClients.filter(c => c.status === 'ممدد').reduce((sum, c) => sum + (c.profit || 0), 0);
-                    const grossExpectedProfit = (monthClients.filter(c => c.status !== 'ممدد').reduce((sum, c) => sum + (Number(c.principal) || 0), 0) * 0.30) + mendedProfit + (extra * 0.30);
-                    const expectedProfit = Math.max(0, grossExpectedProfit - explicitDiscounts);
+                    // الربح المتوقع من رأس مال الشهر المعروض، بما فيه الكاش والإضافي.
+                    const expectedProfit = Math.max(0, totalCapital * 0.30 - explicitDiscounts);
                     
                     // باقي غير المسدد في السوق للشهر الحالي: فقط العقود النشطة التي لم تسدد بعد
                     const activeClients = monthClients.filter(c => c.status === 'نشط');
