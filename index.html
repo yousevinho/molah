@@ -1812,14 +1812,14 @@
                 },
                 resetMonthToCarryover(month) {
                     if (!month) return;
-                    const carried = this.clients.filter(c => c.targetMonth === month && c.carriedFromClientId != null);
-                    const ownClients = this.clients.filter(c => c.targetMonth === month && c.carriedFromClientId == null).length;
+                    const carried = this.clients.filter(c => c.targetMonth === month && this.isCarriedIntoMonth(c, month));
+                    const ownClients = this.clients.filter(c => c.targetMonth === month && !this.isCarriedIntoMonth(c, month)).length;
                     const ownReports = this.reports.filter(r => r.targetMonth === month).length;
                     const ledger = this.getCashLedger();
                     const deposits = Number(ledger.deposits[month]) || 0;
                     const withdrawals = Number(ledger.withdrawals[month]) || 0;
                     if (!confirm(`تصفير شهر ${month}؟\n\nسيبقى ${carried.length} عقد مرحّل، وستُحذف عقود الشهر الأصلية (${ownClients}) وحركاته (${ownReports}) وتُصفّر زيادة الكاش (${deposits}) وخصم الكاش (${withdrawals}).\n\nسيُحسب الكاش من الشهر السابق فقط.`)) return;
-                    this.clients = this.clients.filter(c => c.targetMonth !== month || c.carriedFromClientId != null);
+                    this.clients = this.clients.filter(c => c.targetMonth !== month || this.isCarriedIntoMonth(c, month));
                     const carriedIds = new Set(carried.map(c => String(c.id)));
                     this.reports = this.reports.filter(r => r.targetMonth !== month && !carriedIds.has(String(r.clientId)));
                     delete ledger.deposits[month];
@@ -1828,6 +1828,13 @@
                     this.saveData();
                     this.selectedMonth = month;
                     alert(`تم تصفير شهر ${month} مع إبقاء العقود المرحّلة. الكاش الآن محسوب من الشهر السابق فقط.`);
+                },
+                isCarriedIntoMonth(client, month) {
+                    if (client.carriedFromClientId != null) return true;
+                    const previousMonth = this.getPreviousMonthStr(month);
+                    return this.clients.some(source => source.targetMonth === previousMonth && source.status === 'ممدد' &&
+                        source.name === client.name && String(source.phone || '') === String(client.phone || '') &&
+                        Number(source.principal) === Number(client.principal));
                 },
                 resetAllData() {
                     if(confirm('تنبيه شديد: هل أنت متأكد تماماً من تصفير كافة البيانات ومسح كل الشهور نهائياً؟ لا يمكن التراجع!')) {
